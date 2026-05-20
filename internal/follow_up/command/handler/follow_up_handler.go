@@ -20,8 +20,17 @@ func NewFollowUpCommandHandler(uc usecase.FollowUpCommandUsecase) *FollowUpComma
 
 func (h *FollowUpCommandHandler) CreateFollowUp(c *fiber.Ctx) error {
 	var req dto.CreateFollowUpRequest
-	if err := validator.ValidateBody(c, &req); err != nil {
-		return err
+	if err := c.BodyParser(&req); err != nil {
+		return response.Error(c, fiber.StatusBadRequest, "invalid request body", "ERR_PARSE")
+	}
+
+	if errs := validator.ValidateStruct(&req); len(errs) > 0 {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"success": false,
+			"message": "validation failed",
+			"error":   "ERR_VALIDATION",
+			"data":    errs,
+		})
 	}
 
 	followUp, err := h.usecase.CreateFollowUp(c.Context(), &req)
@@ -36,8 +45,17 @@ func (h *FollowUpCommandHandler) CreateFollowUp(c *fiber.Ctx) error {
 func (h *FollowUpCommandHandler) UpdateStatus(c *fiber.Ctx) error {
 	id := c.Params("id")
 	var req dto.UpdateFollowUpStatusRequest
-	if err := validator.ValidateBody(c, &req); err != nil {
-		return err
+	if err := c.BodyParser(&req); err != nil {
+		return response.Error(c, fiber.StatusBadRequest, "invalid request body", "ERR_PARSE")
+	}
+
+	if errs := validator.ValidateStruct(&req); len(errs) > 0 {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"success": false,
+			"message": "validation failed",
+			"error":   "ERR_VALIDATION",
+			"data":    errs,
+		})
 	}
 
 	if err := h.usecase.UpdateStatus(c.Context(), id, &req); err != nil {

@@ -16,19 +16,19 @@ type ValidationError struct {
 }
 
 func ValidateStruct(s interface{}) []ValidationError {
-	var errors []ValidationError
+	var errs []ValidationError
 
 	err := validate.Struct(s)
 	if err != nil {
 		for _, e := range err.(validator.ValidationErrors) {
-			errors = append(errors, ValidationError{
+			errs = append(errs, ValidationError{
 				Field:   toSnakeCase(e.Field()),
 				Message: formatMessage(e),
 			})
 		}
 	}
 
-	return errors
+	return errs
 }
 
 func ValidateBody(c *fiber.Ctx, out interface{}) error {
@@ -40,13 +40,13 @@ func ValidateBody(c *fiber.Ctx, out interface{}) error {
 		})
 	}
 
-	errors := ValidateStruct(out)
-	if len(errors) > 0 {
+	validationErrors := ValidateStruct(out)
+	if len(validationErrors) > 0 {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"success": false,
 			"message": "validation failed",
 			"error":   "ERR_VALIDATION",
-			"data":    errors,
+			"data":    validationErrors,
 		})
 	}
 
@@ -57,6 +57,10 @@ func formatMessage(e validator.FieldError) string {
 	switch e.Tag() {
 	case "required":
 		return fmt.Sprintf("%s is required", toSnakeCase(e.Field()))
+	case "gte":
+		return fmt.Sprintf("%s must be at least %s", toSnakeCase(e.Field()), e.Param())
+	case "lte":
+		return fmt.Sprintf("%s must be at most %s", toSnakeCase(e.Field()), e.Param())
 	case "min":
 		return fmt.Sprintf("%s must be at least %s", toSnakeCase(e.Field()), e.Param())
 	case "max":
