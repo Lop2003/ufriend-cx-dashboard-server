@@ -1,19 +1,18 @@
-package main
+﻿package main
 
 import (
 	"log"
 	"os"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/fiber/v2/middleware/cors"
 	"ufriend-cx-dashboard-server/internal/customer"
 	"ufriend-cx-dashboard-server/internal/feedback"
 	"ufriend-cx-dashboard-server/internal/follow_up"
 	"ufriend-cx-dashboard-server/pkg/database"
+	"ufriend-cx-dashboard-server/pkg/middleware"
 )
 
 func main() {
-	// ตั้งค่า MongoDB connection
 	mongoURI := os.Getenv("MONGODB_URI")
 	if mongoURI == "" {
 		mongoURI = "mongodb://localhost:27017"
@@ -25,13 +24,15 @@ func main() {
 	}
 	defer db.Close()
 
-	// ตั้งค่า Fiber app
-	app := fiber.New()
+	app := fiber.New(fiber.Config{
+		ErrorHandler: middleware.ErrorHandler,
+	})
 
 	// Middleware
-	app.Use(cors.New())
+	app.Use(middleware.RecoverConfig())
+	app.Use(middleware.CORSConfig())
 
-	// Health check route
+	// Health check
 	app.Get("/health", func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{"status": "ok"})
 	})

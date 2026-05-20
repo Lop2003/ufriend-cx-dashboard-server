@@ -7,6 +7,7 @@ import (
 	"ufriend-cx-dashboard-server/internal/feedback/command/dto"
 	"ufriend-cx-dashboard-server/internal/feedback/command/usecase"
 	"ufriend-cx-dashboard-server/pkg/response"
+	"ufriend-cx-dashboard-server/pkg/validator"
 )
 
 type FeedbackCommandHandler struct {
@@ -19,8 +20,8 @@ func NewFeedbackCommandHandler(uc usecase.FeedbackCommandUsecase) *FeedbackComma
 
 func (h *FeedbackCommandHandler) CreateFeedback(c *fiber.Ctx) error {
 	var req dto.CreateFeedbackRequest
-	if err := c.BodyParser(&req); err != nil {
-		return response.Error(c, fiber.StatusBadRequest, "invalid request body", "ERR_PARSE")
+	if err := validator.ValidateBody(c, &req); err != nil {
+		return err
 	}
 
 	feedback, err := h.usecase.CreateFeedback(c.Context(), &req)

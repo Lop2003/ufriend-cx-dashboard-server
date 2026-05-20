@@ -7,6 +7,7 @@ import (
 	"ufriend-cx-dashboard-server/internal/follow_up/command/dto"
 	"ufriend-cx-dashboard-server/internal/follow_up/command/usecase"
 	"ufriend-cx-dashboard-server/pkg/response"
+	"ufriend-cx-dashboard-server/pkg/validator"
 )
 
 type FollowUpCommandHandler struct {
@@ -19,8 +20,8 @@ func NewFollowUpCommandHandler(uc usecase.FollowUpCommandUsecase) *FollowUpComma
 
 func (h *FollowUpCommandHandler) CreateFollowUp(c *fiber.Ctx) error {
 	var req dto.CreateFollowUpRequest
-	if err := c.BodyParser(&req); err != nil {
-		return response.Error(c, fiber.StatusBadRequest, "invalid request body", "ERR_PARSE")
+	if err := validator.ValidateBody(c, &req); err != nil {
+		return err
 	}
 
 	followUp, err := h.usecase.CreateFollowUp(c.Context(), &req)
@@ -35,8 +36,8 @@ func (h *FollowUpCommandHandler) CreateFollowUp(c *fiber.Ctx) error {
 func (h *FollowUpCommandHandler) UpdateStatus(c *fiber.Ctx) error {
 	id := c.Params("id")
 	var req dto.UpdateFollowUpStatusRequest
-	if err := c.BodyParser(&req); err != nil {
-		return response.Error(c, fiber.StatusBadRequest, "invalid request body", "ERR_PARSE")
+	if err := validator.ValidateBody(c, &req); err != nil {
+		return err
 	}
 
 	if err := h.usecase.UpdateStatus(c.Context(), id, &req); err != nil {
