@@ -1,0 +1,65 @@
+﻿package handler
+
+import (
+	"log/slog"
+
+	"github.com/gofiber/fiber/v2"
+	"ufriend-cx-dashboard-server/internal/customer/query/dto"
+	"ufriend-cx-dashboard-server/internal/customer/query/usecase"
+	"ufriend-cx-dashboard-server/pkg/response"
+)
+
+type CustomerQueryHandler struct {
+	usecase usecase.CustomerQueryUsecase
+}
+
+func NewCustomerQueryHandler(uc usecase.CustomerQueryUsecase) *CustomerQueryHandler {
+	return &CustomerQueryHandler{usecase: uc}
+}
+
+func (h *CustomerQueryHandler) ListCustomers(c *fiber.Ctx) error {
+	var filter dto.CustomerFilter
+	if err := c.QueryParser(&filter); err != nil {
+		return response.Error(c, fiber.StatusBadRequest, "invalid filter", "ERR_PARSE")
+	}
+
+	customers, err := h.usecase.ListCustomers(c.Context(), &filter)
+	if err != nil {
+		slog.Error("list customers failed", "error", err)
+		return response.ErrorServer(c, "failed to list customers", err)
+	}
+
+	return response.OK(c, "customers retrieved", customers)
+}
+
+func (h *CustomerQueryHandler) GetCustomer(c *fiber.Ctx) error {
+	id := c.Params("id")
+
+	detail, err := h.usecase.GetCustomer(c.Context(), id)
+	if err != nil {
+		slog.Error("get customer failed", "error", err)
+		return response.Error(c, fiber.StatusNotFound, "customer not found", "ERR_NOT_FOUND")
+	}
+
+	return response.OK(c, "customer retrieved", detail)
+}
+
+func (h *CustomerQueryHandler) GetSummary(c *fiber.Ctx) error {
+	summary, err := h.usecase.GetSummary(c.Context())
+	if err != nil {
+		slog.Error("get summary failed", "error", err)
+		return response.ErrorServer(c, "failed to get summary", err)
+	}
+
+	return response.OK(c, "summary retrieved", summary)
+}
+
+func (h *CustomerQueryHandler) GetByBranch(c *fiber.Ctx) error {
+	stats, err := h.usecase.GetByBranch(c.Context())
+	if err != nil {
+		slog.Error("get by branch failed", "error", err)
+		return response.ErrorServer(c, "failed to get branch stats", err)
+	}
+
+	return response.OK(c, "branch stats retrieved", stats)
+}
