@@ -1,4 +1,4 @@
-﻿package customer
+package customer
 
 import (
 	"github.com/gofiber/fiber/v2"

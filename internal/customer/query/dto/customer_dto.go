@@ -1,10 +1,13 @@
-﻿package dto
+package dto
 
 import "time"
 
 type CustomerFilter struct {
-	Branch string `query:"branch"`
-	Status string `query:"status"`
+	Branch    string `query:"branch"`
+	Status    string `query:"status"`
+	Search    string `query:"search"`
+	SortBy    string `query:"sort_by"`
+	SortOrder string `query:"sort_order"`
 }
 
 type CustomerResponse struct {

@@ -1,4 +1,4 @@
-﻿package handler
+package handler
 
 import (
 	"log/slog"
@@ -55,10 +55,21 @@ func (h *CustomerQueryHandler) GetSummary(c *fiber.Ctx) error {
 }
 
 func (h *CustomerQueryHandler) GetByBranch(c *fiber.Ctx) error {
+	branch := c.Query("branch")
 	stats, err := h.usecase.GetByBranch(c.Context())
 	if err != nil {
 		slog.Error("get by branch failed", "error", err)
 		return response.ErrorServer(c, "failed to get branch stats", err)
+	}
+
+	if branch != "" {
+		var filteredStats []*dto.BranchStat
+		for _, stat := range stats {
+			if stat.Branch == branch {
+				filteredStats = append(filteredStats, stat)
+			}
+		}
+		stats = filteredStats
 	}
 
 	return response.OK(c, "branch stats retrieved", stats)
