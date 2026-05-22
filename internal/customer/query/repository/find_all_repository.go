@@ -63,7 +63,7 @@ func (r *customerQueryRepository) FindAll(ctx context.Context, filter *dto.Custo
 	}
 	defer cursor.Close(ctx)
 
-	var customers []*model.Customer
+	var customers = []*model.Customer{}
 	if err := cursor.All(ctx, &customers); err != nil {
 		return nil, err
 	}
