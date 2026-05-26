@@ -1,0 +1,13 @@
+package http
+
+import (
+	"github.com/gofiber/fiber/v2"
+	commandHandler "ufriend-cx-dashboard-server/internal/feedback/command/handler"
+	queryHandler "ufriend-cx-dashboard-server/internal/feedback/query/handler"
+)
+
+func RegisterFeedbackHTTPRoutes(app *fiber.App, qh *queryHandler.FeedbackQueryHandler, ch *commandHandler.FeedbackCommandHandler) {
+	api := app.Group("/api/feedbacks")
+	api.Get("/", qh.ListFeedbacks)
+	api.Post("/", ch.CreateFeedback)
+}

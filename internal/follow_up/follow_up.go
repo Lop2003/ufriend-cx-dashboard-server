@@ -1,4 +1,4 @@
-﻿package follow_up
+package follow_up
 
 import (
 	"github.com/gofiber/fiber/v2"
@@ -6,6 +6,7 @@ import (
 	commandHandler "ufriend-cx-dashboard-server/internal/follow_up/command/handler"
 	commandRepository "ufriend-cx-dashboard-server/internal/follow_up/command/repository"
 	commandUsecase "ufriend-cx-dashboard-server/internal/follow_up/command/usecase"
+	"ufriend-cx-dashboard-server/internal/follow_up/router/http"
 )
 
 type FollowUpDomain struct {
@@ -23,7 +24,5 @@ func NewFollowUpDomain(db *mongo.Database) *FollowUpDomain {
 }
 
 func (d *FollowUpDomain) RegisterRoutes(app *fiber.App) {
-	api := app.Group("/api/follow-ups")
-	api.Post("/", d.commandHandler.CreateFollowUp)
-	api.Patch("/:id", d.commandHandler.UpdateStatus)
+	http.RegisterFollowUpHTTPRoutes(app, d.commandHandler)
 }

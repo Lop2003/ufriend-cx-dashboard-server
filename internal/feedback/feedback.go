@@ -1,4 +1,4 @@
-﻿package feedback
+package feedback
 
 import (
 	"github.com/gofiber/fiber/v2"
@@ -9,6 +9,7 @@ import (
 	queryHandler "ufriend-cx-dashboard-server/internal/feedback/query/handler"
 	queryRepository "ufriend-cx-dashboard-server/internal/feedback/query/repository"
 	queryUsecase "ufriend-cx-dashboard-server/internal/feedback/query/usecase"
+	"ufriend-cx-dashboard-server/internal/feedback/router/http"
 )
 
 type FeedbackDomain struct {
@@ -32,7 +33,5 @@ func NewFeedbackDomain(db *mongo.Database) *FeedbackDomain {
 }
 
 func (d *FeedbackDomain) RegisterRoutes(app *fiber.App) {
-	api := app.Group("/api/feedbacks")
-	api.Get("/", d.queryHandler.ListFeedbacks)
-	api.Post("/", d.commandHandler.CreateFeedback)
+	http.RegisterFeedbackHTTPRoutes(app, d.queryHandler, d.commandHandler)
 }
