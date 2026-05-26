@@ -1,10 +1,11 @@
-﻿package main
+package main
 
 import (
 	"log"
 	"os"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/joho/godotenv"
 	"ufriend-cx-dashboard-server/internal/customer"
 	"ufriend-cx-dashboard-server/internal/feedback"
 	"ufriend-cx-dashboard-server/internal/follow_up"
@@ -13,6 +14,8 @@ import (
 )
 
 func main() {
+	_ = godotenv.Load()
+
 	mongoURI := os.Getenv("MONGODB_URI")
 	if mongoURI == "" {
 		mongoURI = "mongodb://localhost:27017"
