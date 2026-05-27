@@ -10,7 +10,7 @@ import (
 	"ufriend-cx-dashboard-server/internal/customer/query/dto"
 )
 
-func (r *customerQueryRepository) FindAll(ctx context.Context, filter *dto.CustomerFilter) ([]*model.Customer, error) {
+func (r *customerQueryRepository) FindAll(ctx context.Context, filter *dto.CustomerFilter) ([]*model.Customer, int64, error) {
 	collection := r.db.Collection("customers")
 
 	bsonFilter := bson.M{}
@@ -21,7 +21,6 @@ func (r *customerQueryRepository) FindAll(ctx context.Context, filter *dto.Custo
 		bsonFilter["status"] = filter.Status
 	}
 	if filter.Search != "" {
-		// Escape special characters to prevent regex injection (ReDoS) or syntax error
 		escapedSearch := regexp.QuoteMeta(filter.Search)
 		bsonFilter["$or"] = []bson.M{
 			{"name": bson.M{"$regex": escapedSearch, "$options": "i"}},
@@ -30,13 +29,17 @@ func (r *customerQueryRepository) FindAll(ctx context.Context, filter *dto.Custo
 		}
 	}
 
+	// นับจำนวน document ที่ match filter ก่อน pagination
+	total, err := collection.CountDocuments(ctx, bsonFilter)
+	if err != nil {
+		return nil, 0, err
+	}
+
 	opts := options.Find()
 
-	// Default sort by created_at descending
 	sortBy := "created_at"
 	sortOrder := -1
 
-	// Validate sort field to prevent MongoDB injection or errors
 	allowedSortFields := map[string]string{
 		"name":        "name",
 		"product":     "product",
@@ -57,16 +60,31 @@ func (r *customerQueryRepository) FindAll(ctx context.Context, filter *dto.Custo
 
 	opts.SetSort(bson.D{{Key: sortBy, Value: sortOrder}})
 
+	// Pagination — ใช้เฉพาะเมื่อ Limit > 0
+	// ถ้า Limit = 0 → return ทุก document (ใช้สำหรับ form dropdown / branch map)
+	if filter.Limit > 0 {
+		page := filter.Page
+		if page < 1 {
+			page = 1
+		}
+		limit := filter.Limit
+		if limit > 100 {
+			limit = 100 // hard cap
+		}
+		opts.SetSkip(int64((page - 1) * limit))
+		opts.SetLimit(int64(limit))
+	}
+
 	cursor, err := collection.Find(ctx, bsonFilter, opts)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer cursor.Close(ctx)
 
 	var customers = []*model.Customer{}
 	if err := cursor.All(ctx, &customers); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	return customers, nil
+	return customers, total, nil
 }

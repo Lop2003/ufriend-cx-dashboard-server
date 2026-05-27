@@ -64,38 +64,75 @@ func (r *customerQueryRepository) GetSummary(ctx context.Context) (*dto.SummaryR
 }
 
 func (r *customerQueryRepository) GetByBranch(ctx context.Context) ([]*dto.BranchStat, error) {
-	pipeline := mongo.Pipeline{
-		{{Key: "$lookup", Value: bson.M{
-			"from":         "feedbacks",
-			"localField":   "_id",
-			"foreignField": "customer_id",
-			"as":           "feedbacks",
-		}}},
-		{{Key: "$unwind", Value: bson.M{"path": "$feedbacks", "preserveNullAndEmptyArrays": true}}},
+	// Step 1: Aggregate customers by branch (extremely fast, no join)
+	pipelineCustomers := mongo.Pipeline{
 		{{Key: "$group", Value: bson.M{
 			"_id":            "$branch",
-			"customer_count": bson.M{"$addToSet": "$_id"},
-			"avg_rating":     bson.M{"$avg": "$feedbacks.rating"},
-			"overdue_list":   bson.M{"$addToSet": bson.M{"$cond": bson.A{bson.M{"$eq": bson.A{"$status", "overdue"}}, "$_id", nil}}},
-		}}},
-		{{Key: "$project", Value: bson.M{
-			"_id":            1,
-			"customer_count": bson.M{"$size": "$customer_count"},
-			"avg_rating":     bson.M{"$ifNull": bson.A{"$avg_rating", 0}},
-			"overdue_count":  bson.M{"$size": bson.M{"$filter": bson.M{"input": "$overdue_list", "cond": bson.M{"$ne": bson.A{"$$this", nil}}}}},
+			"customer_count": bson.M{"$sum": 1},
+			"overdue_count":  bson.M{"$sum": bson.M{"$cond": bson.A{bson.M{"$eq": bson.A{"$status", "overdue"}}, 1, 0}}},
 		}}},
 		{{Key: "$sort", Value: bson.M{"_id": 1}}},
 	}
 
-	cursor, err := r.db.Collection("customers").Aggregate(ctx, pipeline)
+	cursorCust, err := r.db.Collection("customers").Aggregate(ctx, pipelineCustomers)
 	if err != nil {
-		return nil, fmt.Errorf("aggregate by branch: %w", err)
+		return nil, fmt.Errorf("aggregate customers by branch: %w", err)
 	}
-	defer cursor.Close(ctx)
+	defer cursorCust.Close(ctx)
+
+	var custStats []struct {
+		Branch        string `bson:"_id"`
+		CustomerCount int    `bson:"customer_count"`
+		OverdueCount  int    `bson:"overdue_count"`
+	}
+	if err := cursorCust.All(ctx, &custStats); err != nil {
+		return nil, fmt.Errorf("decode customer branch stats: %w", err)
+	}
+
+	// Step 2: Aggregate average feedback ratings by branch (extremely fast because it starts from feedbacks collection)
+	pipelineFeedbacks := mongo.Pipeline{
+		{{Key: "$lookup", Value: bson.M{
+			"from":         "customers",
+			"localField":   "customer_id",
+			"foreignField": "_id",
+			"as":           "customer",
+		}}},
+		{{Key: "$unwind", Value: "$customer"}},
+		{{Key: "$group", Value: bson.M{
+			"_id":        "$customer.branch",
+			"avg_rating": bson.M{"$avg": "$rating"},
+		}}},
+	}
+
+	cursorFeed, err := r.db.Collection("feedbacks").Aggregate(ctx, pipelineFeedbacks)
+	if err != nil {
+		return nil, fmt.Errorf("aggregate feedbacks by branch: %w", err)
+	}
+	defer cursorFeed.Close(ctx)
+
+	var feedStats []struct {
+		Branch    string  `bson:"_id"`
+		AvgRating float64 `bson:"avg_rating"`
+	}
+	if err := cursorFeed.All(ctx, &feedStats); err != nil {
+		return nil, fmt.Errorf("decode feedback branch stats: %w", err)
+	}
+
+	// Step 3: Merge stats in memory (very small number of branches, N <= 10)
+	ratingsMap := make(map[string]float64)
+	for _, f := range feedStats {
+		ratingsMap[f.Branch] = f.AvgRating
+	}
 
 	var stats []*dto.BranchStat
-	if err := cursor.All(ctx, &stats); err != nil {
-		return nil, fmt.Errorf("decode branch stats: %w", err)
+	for _, c := range custStats {
+		avgRating := ratingsMap[c.Branch]
+		stats = append(stats, &dto.BranchStat{
+			Branch:        c.Branch,
+			CustomerCount: c.CustomerCount,
+			AvgRating:     avgRating,
+			OverdueCount:  c.OverdueCount,
+		})
 	}
 
 	return stats, nil

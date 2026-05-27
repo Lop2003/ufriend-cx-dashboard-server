@@ -1,10 +1,11 @@
-﻿package dto
+package dto
 
 import "time"
 
 type FeedbackFilter struct {
 	Category string `query:"category"`
 	Rating   int    `query:"rating"`
+	Branch   string `query:"branch"`
 }
 
 type FeedbackResponse struct {

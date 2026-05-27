@@ -8,6 +8,17 @@ type CustomerFilter struct {
 	Search    string `query:"search"`
 	SortBy    string `query:"sort_by"`
 	SortOrder string `query:"sort_order"`
+	Page      int    `query:"page"`
+	Limit     int    `query:"limit"`
+}
+
+// PaginatedCustomerResponse — envelope สำหรับ list ลูกค้าแบบมี pagination
+type PaginatedCustomerResponse struct {
+	Items      []*CustomerResponse `json:"items"`
+	Total      int64               `json:"total"`
+	Page       int                 `json:"page"`
+	Limit      int                 `json:"limit"`
+	TotalPages int                 `json:"total_pages"`
 }
 
 type CustomerResponse struct {
