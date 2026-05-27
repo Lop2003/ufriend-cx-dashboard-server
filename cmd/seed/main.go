@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
+	"math/rand"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -40,6 +42,54 @@ type FollowUp struct {
 	CreatedAt  time.Time          `bson:"created_at"`
 }
 
+// Slices for random generation
+var firstNames = []string{
+	"สมชาย", "วิภา", "นภา", "ธนา", "มานี", "สุนีย์", "อรุณ", "จารุณี", "ชัชชาติ", "นัยนา",
+	"ปราชญา", "รพีพร", "สิทธิศักดิ์", "ทิพย์", "วัฒนา", "กิตติ", "ธีรวัฒน์", "อภิชาติ", "สุรศักดิ์", "ประเสริฐ",
+	"มนัส", "ปรีชา", "สมเกียรติ", "สมพงษ์", "วิทูรย์", "วิชัย", "เกรียงไกร", "เกียรติศักดิ์", "อนันต์", "สมบัติ",
+	"ประภาส", "อำนวย", "สุรเดช", "มานะ", "ชูชาติ", "สมคิด", "พิพัฒน์", "วีระ", "อดิศักดิ์", "ดนัย",
+	"พัชรา", "ยุพา", "วรรณา", "นงลักษณ์", "ศิริพร", "เพ็ญศรี", "สุดา", "สุวรรณา", "อารีย์", "วิไล",
+}
+
+var lastNames = []string{
+	"วงศ์ดี", "ศรีสุข", "ใจดี", "รักไทย", "สดใส", "ศรีวงษ์", "สุขสวัสดิ์", "อุดมศรี", "บุญเรือง", "เพ็ญศรี",
+	"ตรีศิริ", "จินดานนท์", "พลอยแจ่ม", "สวามิตร", "ธารสิงห์", "เจริญยศ", "รุ่งเรือง", "งามดี", "แสงทอง", "ดีเลิศ",
+	"มั่นคง", "ทองดี", "รักษาธรรม", "พึ่งบุญ", "ทรัพย์สิน", "สุนทร", "สมบูรณ์", "ประเสริฐสุข", "บุญเกิด", "เลิศวิจิตร",
+	"สุขเจริญ", "พงษ์พานิช", "วัฒนพานิช", "เกียรติขจร", "รักษ์ดี", "สิริวัฒนา", "โสภณ", "เรืองโรจน์", "ศิริวัฒน์",
+}
+
+var products = []string{
+	"iPhone 16 Pro Max", "iPad Air", "iPhone 15", "iPhone 16", "iPad Pro",
+	"MacBook Pro", "Apple Watch", "iPhone 15 Pro", "iPad Mini", "AirPods Max",
+	"iPhone 16 Pro", "MacBook Air", "Apple Watch Ultra",
+}
+
+var branches = []string{
+	"วงเวียนใหญ่", "รังสิต", "ลาดพร้าว", "สยาม", "บางนา", "ปิ่นเกล้า", "พระราม 9", "ฟิวเจอร์พาร์ค", "เมกาบางนา",
+}
+
+var planMonths = []int{6, 8, 10, 12, 20, 24}
+
+var positiveComments = []string{
+	"บริการดีเยี่ยมมากครับ", "พนักงานพูดจาดี น่ารักมาก", "อนุมัติไวมาก แนะนำเลยครับ",
+	"สินค้าคุณภาพดีมาก ไม่มีปัญหาเลย", "สาขาบริการรวดเร็วทันใจ ประทับใจมาก",
+	"ประทับใจระบบผ่อน สะดวกมาก", "เจ้าหน้าที่ตอบคำถามชัดเจนดีมากครับ", "ชอบบริการสาขานี้มาก รวดเร็วดี",
+}
+
+var neutralComments = []string{
+	"บริการอยู่ในระดับปานกลาง", "พอใช้ได้ ไม่มีปัญหาอะไรพิเศษ", "ดอกเบี้ยปานกลาง พอรับได้",
+	"ระบบมีหน่วงๆ บ้างบางช่วง แต่ใช้งานได้", "ตามมาตรฐานทั่วไป ไม่มีอะไรพิเศษ",
+	"โอเค ไม่มีปัญหาอะไร ปกติดี", "พอใจปานกลาง ทำงานปกติ",
+}
+
+var negativeComments = []string{
+	"บริการแย่มาก ติดต่อยากสุดๆ", "ดอกเบี้ยแพงเกินไป ผ่อนไม่ไหวแล้ว", "พนักงานไม่มีความสุภาพเลย",
+	"ระบบล่มบ่อยมาก ทำรายการไม่ได้เลย", "ค้างชำระเพราะระบบมีปัญหา", "ติดต่อเจ้าหน้าที่ยากมาก",
+	"ดอกเบี้ยค่อนข้างแพงไปหน่อย ไม่เข้าใจสัญญา", "พนักงานบริการช้า รอนานมาก",
+}
+
+var categories = []string{"service", "payment", "product", "branch"}
+
 func sentimentFromRating(rating int) string {
 	switch {
 	case rating >= 4:
@@ -51,104 +101,256 @@ func sentimentFromRating(rating int) string {
 	}
 }
 
+func randomPhone() string {
+	prefixes := []string{"081", "082", "083", "084", "085", "086", "087", "088", "089", "095", "096", "097"}
+	prefix := prefixes[rand.Intn(len(prefixes))]
+	part1 := rand.Intn(900) + 100  // 100-999
+	part2 := rand.Intn(9000) + 1000 // 1000-9999
+	return fmt.Sprintf("%s-%d-%d", prefix, part1, part2)
+}
+
 func main() {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	log.Println("⚡ Starting database seeder...")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 
+	// Connect to MongoDB
 	client, err := mongo.Connect(ctx, options.Client().ApplyURI("mongodb://localhost:27017"))
 	if err != nil {
-		log.Fatal("connect error:", err)
+		log.Fatal("Connection error:", err)
 	}
 	defer client.Disconnect(ctx)
 
 	db := client.Database("ufriend_cx")
 
-	// Drop collections เพื่อ seed ใหม่
+	// Drop collections
+	log.Println("🗑️ Dropping existing collections...")
 	db.Collection("customers").Drop(ctx)
 	db.Collection("feedbacks").Drop(ctx)
 	db.Collection("follow_ups").Drop(ctx)
 
-	// Customers (15 รายการ)
-	c1 := primitive.NewObjectID()
-	c2 := primitive.NewObjectID()
-	c3 := primitive.NewObjectID()
-	c4 := primitive.NewObjectID()
-	c5 := primitive.NewObjectID()
-	c6 := primitive.NewObjectID()
-	c7 := primitive.NewObjectID()
-	c8 := primitive.NewObjectID()
-	c9 := primitive.NewObjectID()
-	c10 := primitive.NewObjectID()
-	c11 := primitive.NewObjectID()
-	c12 := primitive.NewObjectID()
-	c13 := primitive.NewObjectID()
-	c14 := primitive.NewObjectID()
-	c15 := primitive.NewObjectID()
+	totalCustomers := 100000
+	batchSize := 10000
 
-	customers := []interface{}{
-		Customer{Id: c1, Name: "สมชาย วงศ์ดี", Phone: "081-111-1111", Product: "iPhone 16 Pro Max", Branch: "วงเวียนใหญ่", PlanMonths: 10, Status: "active", CreatedAt: time.Now().AddDate(0, -2, 0)},
-		Customer{Id: c2, Name: "วิภา ศรีสุข", Phone: "082-222-2222", Product: "iPad Air", Branch: "รังสิต", PlanMonths: 6, Status: "overdue", CreatedAt: time.Now().AddDate(0, -3, 0)},
-		Customer{Id: c3, Name: "นภา ใจดี", Phone: "083-333-3333", Product: "iPhone 15", Branch: "วงเวียนใหญ่", PlanMonths: 12, Status: "completed", CreatedAt: time.Now().AddDate(0, -6, 0)},
-		Customer{Id: c4, Name: "ธนา รักไทย", Phone: "084-444-4444", Product: "iPhone 16", Branch: "ลาดพร้าว", PlanMonths: 10, Status: "active", CreatedAt: time.Now().AddDate(0, -1, 0)},
-		Customer{Id: c5, Name: "มานี สดใส", Phone: "085-555-5555", Product: "iPad Pro", Branch: "รังสิต", PlanMonths: 12, Status: "overdue", CreatedAt: time.Now().AddDate(0, -4, 0)},
-		Customer{Id: c6, Name: "สุนีย์ ศรีวงษ์", Phone: "086-666-6666", Product: "MacBook Pro", Branch: "วงเวียนใหญ่", PlanMonths: 24, Status: "active", CreatedAt: time.Now().AddDate(0, -1, -10)},
-		Customer{Id: c7, Name: "อรุณ สุขสวัสดิ์", Phone: "087-777-7777", Product: "Apple Watch", Branch: "ลาดพร้าว", PlanMonths: 8, Status: "active", CreatedAt: time.Now().AddDate(0, 0, -5)},
-		Customer{Id: c8, Name: "จารุณี อุดมศรี", Phone: "088-888-8888", Product: "iPhone 15 Pro", Branch: "สยาม", PlanMonths: 12, Status: "overdue", CreatedAt: time.Now().AddDate(0, -5, 0)},
-		Customer{Id: c9, Name: "ชัชชาติ บุญเรือง", Phone: "089-999-9999", Product: "iPad Mini", Branch: "รังสิต", PlanMonths: 10, Status: "completed", CreatedAt: time.Now().AddDate(0, -7, 0)},
-		Customer{Id: c10, Name: "นัยนา เพ็ญศรี", Phone: "081-111-2222", Product: "AirPods Max", Branch: "วงเวียนใหญ่", PlanMonths: 6, Status: "active", CreatedAt: time.Now().AddDate(0, -2, -15)},
-		Customer{Id: c11, Name: "ปราชญา ตรีศิริ", Phone: "082-222-3333", Product: "iPhone 16 Pro", Branch: "ลาดพร้าว", PlanMonths: 12, Status: "overdue", CreatedAt: time.Now().AddDate(0, -2, 0)},
-		Customer{Id: c12, Name: "รพีพร จินดานนท์", Phone: "083-333-4444", Product: "MacBook Air", Branch: "สยาม", PlanMonths: 20, Status: "active", CreatedAt: time.Now().AddDate(0, -1, 0)},
-		Customer{Id: c13, Name: "สิทธิศักดิ์ พลอยแจ่ม", Phone: "084-444-5555", Product: "iPad Air", Branch: "รังสิต", PlanMonths: 8, Status: "completed", CreatedAt: time.Now().AddDate(0, -8, 0)},
-		Customer{Id: c14, Name: "ทิพย์ สวามิตร", Phone: "085-555-6666", Product: "iPhone 15", Branch: "วงเวียนใหญ่", PlanMonths: 10, Status: "active", CreatedAt: time.Now().AddDate(0, -1, -20)},
-		Customer{Id: c15, Name: "วัฒนา ธารสิงห์", Phone: "086-666-7777", Product: "Apple Watch Ultra", Branch: "ลาดพร้าว", PlanMonths: 6, Status: "overdue", CreatedAt: time.Now().AddDate(0, -4, -10)},
+	customersCol := db.Collection("customers")
+	feedbacksCol := db.Collection("feedbacks")
+	followUpsCol := db.Collection("follow_ups")
+
+	rand.Seed(time.Now().UnixNano())
+
+	startTime := time.Now()
+
+	var customersBatch []interface{}
+	var feedbacksBatch []interface{}
+	var followUpsBatch []interface{}
+
+	var createdCustomersCount int
+	var createdFeedbacksCount int
+	var createdFollowUpsCount int
+
+	log.Printf("🌱 Generating %d customers, comments, and follow-ups...", totalCustomers)
+
+	for i := 1; i <= totalCustomers; i++ {
+		// 1. Generate Customer
+		cID := primitive.NewObjectID()
+		name := firstNames[rand.Intn(len(firstNames))] + " " + lastNames[rand.Intn(len(lastNames))]
+		phone := randomPhone()
+		product := products[rand.Intn(len(products))]
+		branch := branches[rand.Intn(len(branches))]
+		plan := planMonths[rand.Intn(len(planMonths))]
+
+		// Distribute status: 70% active, 15% completed, 15% overdue
+		statusRand := rand.Float64()
+		status := "active"
+		if statusRand < 0.15 {
+			status = "completed"
+		} else if statusRand < 0.30 {
+			status = "overdue"
+		}
+
+		// CreatedAt in the last 365 days
+		createdAt := time.Now().AddDate(0, 0, -rand.Intn(365))
+
+		customer := Customer{
+			Id:         cID,
+			Name:       name,
+			Phone:      phone,
+			Product:    product,
+			Branch:     branch,
+			PlanMonths: plan,
+			Status:     status,
+			CreatedAt:  createdAt,
+		}
+		customersBatch = append(customersBatch, customer)
+
+		// 2. Generate Feedback (approx 30% chance for any customer)
+		hasFeedback := rand.Float64() < 0.30
+		var feedbackRating int
+		var feedbackDate time.Time
+
+		if hasFeedback {
+			// Rating bias: completed is positive, overdue is negative, active is random
+			var rating int
+			if status == "completed" {
+				// Bias 4-5 stars
+				rating = 4 + rand.Intn(2)
+			} else if status == "overdue" {
+				// Bias 1-3 stars
+				rating = 1 + rand.Intn(3)
+			} else {
+				// Bias mostly positive (1-5 with higher weight on positive)
+				r := rand.Float64()
+				if r < 0.10 {
+					rating = 1
+				} else if r < 0.20 {
+					rating = 2
+				} else if r < 0.35 {
+					rating = 3
+				} else if r < 0.65 {
+					rating = 4
+				} else {
+					rating = 5
+				}
+			}
+			feedbackRating = rating
+
+			var comment string
+			if rating >= 4 {
+				comment = positiveComments[rand.Intn(len(positiveComments))]
+			} else if rating == 3 {
+				comment = neutralComments[rand.Intn(len(neutralComments))]
+			} else {
+				comment = negativeComments[rand.Intn(len(negativeComments))]
+			}
+
+			category := categories[rand.Intn(len(categories))]
+			sentiment := sentimentFromRating(rating)
+			feedbackDate = createdAt.Add(time.Duration(rand.Intn(24*7)) * time.Hour) // Feedback within a week
+
+			feedback := Feedback{
+				Id:         primitive.NewObjectID(),
+				CustomerId: cID,
+				Rating:     rating,
+				Comment:    comment,
+				Category:   category,
+				Sentiment:  sentiment,
+				CreatedAt:  feedbackDate,
+			}
+			feedbacksBatch = append(feedbacksBatch, feedback)
+		}
+
+		// 3. Generate Follow Up
+		// High probability if overdue (80%), or if they left a bad feedback (rating <= 2) (70%)
+		shouldFollowUp := false
+		followUpType := "general"
+		followUpNote := ""
+
+		if status == "overdue" && rand.Float64() < 0.80 {
+			shouldFollowUp = true
+			followUpType = "payment_remind"
+			notes := []string{
+				"โทรแจ้งยอดค้างชำระ ลูกค้าสัญญาว่าจะจ่ายภายในสัปดาห์นี้",
+				"ส่ง SMS แจ้งเตือนยอดค้างชำระเรียบร้อย",
+				"โทรติดต่อไม่ได้ อยู่ระหว่างรอติดต่อกลับ",
+				"ส่งอีเมลแจ้งเตือนการค้างชำระงวดล่าสุด",
+				"เสนอปรับโครงสร้างหนี้และลดดอกเบี้ยให้ลูกค้า",
+			}
+			followUpNote = notes[rand.Intn(len(notes))]
+		} else if hasFeedback && feedbackRating <= 2 && rand.Float64() < 0.70 {
+			shouldFollowUp = true
+			followUpType = "feedback_reply"
+			notes := []string{
+				"ติดต่อลูกค้าเพื่อสอบถามปัญหารายละเอียดเรื่องร้องเรียนและเสนอแนวทางแก้ไข",
+				"โทรขอโทษลูกค้าเรื่องการบริการของพนักงานและประสานงานสาขาตรวจสอบ",
+				"ส่งอีเมลชี้แจงการแก้ไขข้อผิดพลาดระบบและมอบโค้ดส่วนลดพิเศษชดเชย",
+			}
+			followUpNote = notes[rand.Intn(len(notes))]
+		}
+
+		if shouldFollowUp {
+			followUpStatus := "pending"
+			if rand.Float64() < 0.50 {
+				followUpStatus = "done"
+			}
+
+			var followUpDate time.Time
+			if !feedbackDate.IsZero() {
+				followUpDate = feedbackDate.Add(time.Duration(rand.Intn(24*3)) * time.Hour) // Followup within 3 days of feedback
+			} else {
+				followUpDate = createdAt.Add(time.Duration(rand.Intn(24*14)) * time.Hour) // Followup within 2 weeks of creation
+			}
+
+			followUp := FollowUp{
+				Id:         primitive.NewObjectID(),
+				CustomerId: cID,
+				Type:       followUpType,
+				Note:       followUpNote,
+				Status:     followUpStatus,
+				CreatedAt:  followUpDate,
+			}
+			followUpsBatch = append(followUpsBatch, followUp)
+		}
+
+		// Insert batches to avoid running out of memory
+		if len(customersBatch) >= batchSize {
+			_, err = customersCol.InsertMany(ctx, customersBatch)
+			if err != nil {
+				log.Fatal("Error inserting customers batch:", err)
+			}
+			createdCustomersCount += len(customersBatch)
+			customersBatch = nil
+
+			if len(feedbacksBatch) > 0 {
+				_, err = feedbacksCol.InsertMany(ctx, feedbacksBatch)
+				if err != nil {
+					log.Fatal("Error inserting feedbacks batch:", err)
+				}
+				createdFeedbacksCount += len(feedbacksBatch)
+				feedbacksBatch = nil
+			}
+
+			if len(followUpsBatch) > 0 {
+				_, err = followUpsCol.InsertMany(ctx, followUpsBatch)
+				if err != nil {
+					log.Fatal("Error inserting followups batch:", err)
+				}
+				createdFollowUpsCount += len(followUpsBatch)
+				followUpsBatch = nil
+			}
+
+			log.Printf("⏳ Seeding progress: %d / %d customers...", createdCustomersCount, totalCustomers)
+		}
 	}
 
-	_, err = db.Collection("customers").InsertMany(ctx, customers)
-	if err != nil {
-		log.Fatal("seed customers error:", err)
+	// Insert any remaining items in the batches
+	if len(customersBatch) > 0 {
+		_, err = customersCol.InsertMany(ctx, customersBatch)
+		if err != nil {
+			log.Fatal("Error inserting final customers batch:", err)
+		}
+		createdCustomersCount += len(customersBatch)
 	}
-	log.Println("✓ customers seeded")
-
-	// Feedbacks (15 รายการ)
-	feedbacks := []interface{}{
-		Feedback{Id: primitive.NewObjectID(), CustomerId: c1, Rating: 5, Comment: "พนักงานพูดดี อธิบายชัดเจน", Category: "service", Sentiment: sentimentFromRating(5), CreatedAt: time.Now().AddDate(0, -1, 0)},
-		Feedback{Id: primitive.NewObjectID(), CustomerId: c2, Rating: 2, Comment: "ดอกเบี้ยแพงไป ไม่เข้าใจตอนทำสัญญา ผ่อนแพง", Category: "payment", Sentiment: sentimentFromRating(2), CreatedAt: time.Now().AddDate(0, -2, 0)},
-		Feedback{Id: primitive.NewObjectID(), CustomerId: c3, Rating: 4, Comment: "สินค้าดี ผ่อนครบแล้ว พอใจทั้งหมด", Category: "product", Sentiment: sentimentFromRating(4), CreatedAt: time.Now().AddDate(0, -1, -15)},
-		Feedback{Id: primitive.NewObjectID(), CustomerId: c4, Rating: 3, Comment: "โอเค ไม่มีปัญหาอะไร ปกติดี", Category: "service", Sentiment: sentimentFromRating(3), CreatedAt: time.Now().AddDate(0, 0, -10)},
-		Feedback{Id: primitive.NewObjectID(), CustomerId: c5, Rating: 1, Comment: "ติดต่อยาก ไม่มีคนรับโทรศัพท์ บริการแย่", Category: "branch", Sentiment: sentimentFromRating(1), CreatedAt: time.Now().AddDate(0, -3, 0)},
-		Feedback{Id: primitive.NewObjectID(), CustomerId: c6, Rating: 5, Comment: "ทีมงานมืออาชีพ สินค้าคุณภาพดี แนะนำได้", Category: "service", Sentiment: sentimentFromRating(5), CreatedAt: time.Now().AddDate(0, -1, -10)},
-		Feedback{Id: primitive.NewObjectID(), CustomerId: c7, Rating: 4, Comment: "กระบวนการผ่อนง่าย เหมาะสมมาก", Category: "product", Sentiment: sentimentFromRating(4), CreatedAt: time.Now().AddDate(0, 0, -5)},
-		Feedback{Id: primitive.NewObjectID(), CustomerId: c8, Rating: 2, Comment: "ค้างชำระนาน เอกสารสับสน", Category: "payment", Sentiment: sentimentFromRating(2), CreatedAt: time.Now().AddDate(0, -2, -5)},
-		Feedback{Id: primitive.NewObjectID(), CustomerId: c9, Rating: 5, Comment: "บริการท่องหาหมื่นครั้ง พอใจมากครับ", Category: "service", Sentiment: sentimentFromRating(5), CreatedAt: time.Now().AddDate(0, -1, 0)},
-		Feedback{Id: primitive.NewObjectID(), CustomerId: c10, Rating: 3, Comment: "พอใจปานกลาง ทำงานปกติ", Category: "service", Sentiment: sentimentFromRating(3), CreatedAt: time.Now().AddDate(0, 0, -7)},
-		Feedback{Id: primitive.NewObjectID(), CustomerId: c11, Rating: 1, Comment: "อัตราดอกเบี้ยสูง ไม่เหมาะสม ค้างชำระ", Category: "payment", Sentiment: sentimentFromRating(1), CreatedAt: time.Now().AddDate(0, -1, -10)},
-		Feedback{Id: primitive.NewObjectID(), CustomerId: c12, Rating: 4, Comment: "ได้สินค้าตามที่ต้องการ บริการดี", Category: "product", Sentiment: sentimentFromRating(4), CreatedAt: time.Now().AddDate(0, 0, -3)},
-		Feedback{Id: primitive.NewObjectID(), CustomerId: c13, Rating: 5, Comment: "โครงการผ่อนดี สมัครสำเร็จ พอใจมาก", Category: "service", Sentiment: sentimentFromRating(5), CreatedAt: time.Now().AddDate(0, -1, -15)},
-		Feedback{Id: primitive.NewObjectID(), CustomerId: c14, Rating: 4, Comment: "สาขาเข้าใจดี ใช้บริการได้สะดวก", Category: "branch", Sentiment: sentimentFromRating(4), CreatedAt: time.Now().AddDate(0, 0, -8)},
-		Feedback{Id: primitive.NewObjectID(), CustomerId: c15, Rating: 2, Comment: "ผ่อนติดขัด ติดต่อบอก ไม่มีหนทาง", Category: "payment", Sentiment: sentimentFromRating(2), CreatedAt: time.Now().AddDate(0, -2, -3)},
+	if len(feedbacksBatch) > 0 {
+		_, err = feedbacksCol.InsertMany(ctx, feedbacksBatch)
+		if err != nil {
+			log.Fatal("Error inserting final feedbacks batch:", err)
+		}
+		createdFeedbacksCount += len(feedbacksBatch)
+	}
+	if len(followUpsBatch) > 0 {
+		_, err = followUpsCol.InsertMany(ctx, followUpsBatch)
+		if err != nil {
+			log.Fatal("Error inserting final followups batch:", err)
+		}
+		createdFollowUpsCount += len(followUpsBatch)
 	}
 
-	_, err = db.Collection("feedbacks").InsertMany(ctx, feedbacks)
-	if err != nil {
-		log.Fatal("seed feedbacks error:", err)
-	}
-	log.Println("✓ feedbacks seeded")
-
-	// Follow ups
-	followUps := []interface{}{
-		FollowUp{Id: primitive.NewObjectID(), CustomerId: c2, Type: "payment_remind", Note: "โทรแจ้งค้างชำระ 2 งวด รอการติดต่อกลับ", Status: "pending", CreatedAt: time.Now().AddDate(0, 0, -5)},
-		FollowUp{Id: primitive.NewObjectID(), CustomerId: c5, Type: "payment_remind", Note: "ส่ง SMS แจ้งเตือนค้างชำระแล้ว", Status: "done", CreatedAt: time.Now().AddDate(0, -1, 0)},
-		FollowUp{Id: primitive.NewObjectID(), CustomerId: c2, Type: "feedback_reply", Note: "ขอโทษลูกค้าเรื่องดอกเบี้ย อธิบายเงื่อนไขเพิ่มเติม", Status: "done", CreatedAt: time.Now().AddDate(0, -2, 0)},
-		FollowUp{Id: primitive.NewObjectID(), CustomerId: c8, Type: "payment_remind", Note: "โทรติดตามการชำระเงิน ปรึกษาแผนชำระ", Status: "pending", CreatedAt: time.Now().AddDate(0, 0, -3)},
-		FollowUp{Id: primitive.NewObjectID(), CustomerId: c11, Type: "payment_remind", Note: "ส่ง Email แจ้งเตือนค้างชำระ งวดที่ 3", Status: "done", CreatedAt: time.Now().AddDate(0, -1, -5)},
-		FollowUp{Id: primitive.NewObjectID(), CustomerId: c15, Type: "payment_remind", Note: "ติดต่อทำการชำระบางส่วน อยู่ระหว่างต่อรอง", Status: "pending", CreatedAt: time.Now().AddDate(0, 0, -2)},
-	}
-
-	_, err = db.Collection("follow_ups").InsertMany(ctx, followUps)
-	if err != nil {
-		log.Fatal("seed follow_ups error:", err)
-	}
-	log.Println("✓ follow_ups seeded")
-
-	log.Println("seed เสร็จแล้ว!")
+	elapsed := time.Since(startTime)
+	log.Println("──────────────────────────────────────────────────")
+	log.Printf("🎉 Database seeding completed successfully in %s!", elapsed)
+	log.Printf("👥 Total Customers Seeded: %d", createdCustomersCount)
+	log.Printf("💬 Total Feedbacks Seeded: %d", createdFeedbacksCount)
+	log.Printf("📞 Total Follow-ups Seeded: %d", createdFollowUpsCount)
+	log.Println("──────────────────────────────────────────────────")
 }
