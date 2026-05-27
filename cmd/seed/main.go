@@ -7,6 +7,7 @@ import (
 	"math/rand"
 	"time"
 
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -26,6 +27,7 @@ type Customer struct {
 type Feedback struct {
 	Id         primitive.ObjectID `bson:"_id"`
 	CustomerId primitive.ObjectID `bson:"customer_id"`
+	Branch     string             `bson:"branch"`
 	Rating     int                `bson:"rating"`
 	Comment    string             `bson:"comment"`
 	Category   string             `bson:"category"`
@@ -130,7 +132,7 @@ func main() {
 	db.Collection("feedbacks").Drop(ctx)
 	db.Collection("follow_ups").Drop(ctx)
 
-	totalCustomers := 100000
+	totalCustomers := 2000000
 	batchSize := 10000
 
 	customersCol := db.Collection("customers")
@@ -199,18 +201,48 @@ func main() {
 				// Bias 1-3 stars
 				rating = 1 + rand.Intn(3)
 			} else {
-				// Bias mostly positive (1-5 with higher weight on positive)
+				// Branch-specific bias
 				r := rand.Float64()
-				if r < 0.10 {
-					rating = 1
-				} else if r < 0.20 {
-					rating = 2
-				} else if r < 0.35 {
-					rating = 3
-				} else if r < 0.65 {
-					rating = 4
-				} else {
-					rating = 5
+				switch branch {
+				case "สยาม", "เมกาบางนา":
+					// High satisfaction bias (mostly 4-5 stars)
+					if r < 0.05 {
+						rating = 1
+					} else if r < 0.10 {
+						rating = 2
+					} else if r < 0.20 {
+						rating = 3
+					} else if r < 0.55 {
+						rating = 4
+					} else {
+						rating = 5
+					}
+				case "ลาดพร้าว", "บางนา":
+					// Low satisfaction bias (mostly 1-3 stars)
+					if r < 0.35 {
+						rating = 1
+					} else if r < 0.60 {
+						rating = 2
+					} else if r < 0.80 {
+						rating = 3
+					} else if r < 0.95 {
+						rating = 4
+					} else {
+						rating = 5
+					}
+				default:
+					// Average bias
+					if r < 0.10 {
+						rating = 1
+					} else if r < 0.20 {
+						rating = 2
+					} else if r < 0.35 {
+						rating = 3
+					} else if r < 0.65 {
+						rating = 4
+					} else {
+						rating = 5
+					}
 				}
 			}
 			feedbackRating = rating
@@ -231,6 +263,7 @@ func main() {
 			feedback := Feedback{
 				Id:         primitive.NewObjectID(),
 				CustomerId: cID,
+				Branch:     branch,
 				Rating:     rating,
 				Comment:    comment,
 				Category:   category,
@@ -345,6 +378,22 @@ func main() {
 		}
 		createdFollowUpsCount += len(followUpsBatch)
 	}
+
+	log.Println("⚡ Creating indexes for high-performance queries...")
+	// Index on customers
+	_, _ = customersCol.Indexes().CreateMany(ctx, []mongo.IndexModel{
+		{Keys: bson.D{{Key: "branch", Value: 1}}},
+		{Keys: bson.D{{Key: "status", Value: 1}}},
+		{Keys: bson.D{{Key: "created_at", Value: -1}}},
+	})
+	
+	// Index on feedbacks
+	_, _ = feedbacksCol.Indexes().CreateMany(ctx, []mongo.IndexModel{
+		{Keys: bson.D{{Key: "branch", Value: 1}}},
+		{Keys: bson.D{{Key: "category", Value: 1}}},
+		{Keys: bson.D{{Key: "rating", Value: 1}}},
+		{Keys: bson.D{{Key: "customer_id", Value: 1}}},
+	})
 
 	elapsed := time.Since(startTime)
 	log.Println("──────────────────────────────────────────────────")

@@ -9,5 +9,6 @@ import (
 func RegisterFeedbackHTTPRoutes(app *fiber.App, qh *queryHandler.FeedbackQueryHandler, ch *commandHandler.FeedbackCommandHandler) {
 	api := app.Group("/api/feedbacks")
 	api.Get("/", qh.ListFeedbacks)
+	api.Get("/stats", qh.GetFeedbackStats)
 	api.Post("/", ch.CreateFeedback)
 }

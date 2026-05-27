@@ -89,17 +89,10 @@ func (r *customerQueryRepository) GetByBranch(ctx context.Context) ([]*dto.Branc
 		return nil, fmt.Errorf("decode customer branch stats: %w", err)
 	}
 
-	// Step 2: Aggregate average feedback ratings by branch (extremely fast because it starts from feedbacks collection)
+	// Step 2: Aggregate average feedback ratings by branch (extremely fast, no join!)
 	pipelineFeedbacks := mongo.Pipeline{
-		{{Key: "$lookup", Value: bson.M{
-			"from":         "customers",
-			"localField":   "customer_id",
-			"foreignField": "_id",
-			"as":           "customer",
-		}}},
-		{{Key: "$unwind", Value: "$customer"}},
 		{{Key: "$group", Value: bson.M{
-			"_id":        "$customer.branch",
+			"_id":        "$branch",
 			"avg_rating": bson.M{"$avg": "$rating"},
 		}}},
 	}

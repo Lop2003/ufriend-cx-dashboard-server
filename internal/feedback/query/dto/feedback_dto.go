@@ -17,3 +17,11 @@ type FeedbackResponse struct {
 	Sentiment  string    `json:"sentiment"`
 	CreatedAt  time.Time `json:"created_at"`
 }
+
+type FeedbackStatsResponse struct {
+	AvgRating     float64   `json:"avg_rating"`
+	PositiveCount int       `json:"positive_count"`
+	NeutralCount  int       `json:"neutral_count"`
+	NegativeCount int       `json:"negative_count"`
+	WeeklyCSAT     []float64 `json:"weekly_csat"`
+}

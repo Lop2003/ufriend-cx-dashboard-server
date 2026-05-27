@@ -147,10 +147,10 @@
 ### **3.4 สถิติแยกตามสาขา (Get Stats by Branch)**
 ดึงข้อมูลสรุปสถิติจำนวนลูกค้า เรตติ้งเฉลี่ย และยอดค้างติดตามแยกตามสาขา
 * **Method:** `GET`
-* **Path:** `/api/stats/by-branch`
+* **Path:** `/api/stats/branches`
 * **คำสั่ง curl:**
   ```bash
-  curl -X GET http://localhost:3000/api/stats/by-branch
+  curl -X GET http://localhost:3000/api/stats/branches
   ```
 * **ตัวอย่าง Success Response (200 OK):**
   ```json
@@ -258,6 +258,42 @@
       "category": "product",
       "sentiment": "positive",
       "created_at": "2026-05-22T01:39:12Z"
+    }
+  }
+  ```
+
+---
+
+### **4.3 ดึงข้อมูลสถิติฟีดแบ็กรายสาขา/ภาพรวมสำหรับกราฟ (Get Feedback Stats)**
+ใช้ดึงสถิติตัวชี้วัดคะแนนความพึงพอใจ สัดส่วนความรู้สึก (Sentiment) และกราฟเส้นความพึงพอใจรายสัปดาห์ (Weekly CSAT) แบบไม่ต้องดาวน์โหลดรีวิวทั้งหมดมารันคำนวณที่เบราว์เซอร์
+* **Method:** `GET`
+* **Path:** `/api/feedbacks/stats`
+* **Query Parameters:**
+  * `branch` (string, optional) - กรองเพื่อดูสถิติรีวิวเฉพาะรายสาขา เช่น `ลาดพร้าว`, `สยาม`
+* **คำสั่ง curl:**
+  ```bash
+  # ดึงสถิติรีวิวภาพรวมของทุกสาขา
+  curl -X GET "http://localhost:3000/api/feedbacks/stats"
+
+  # ดึงสถิติรีวิวเฉพาะสาขาสยาม
+  curl -X GET "http://localhost:3000/api/feedbacks/stats?branch=สยาม"
+  ```
+* **ตัวอย่าง Success Response (200 OK):**
+  ```json
+  {
+    "success": true,
+    "message": "feedback stats retrieved",
+    "data": {
+      "avg_rating": 4.56,
+      "positive_count": 120,
+      "neutral_count": 30,
+      "negative_count": 5,
+      "weekly_csat": [
+        4.3,
+        4.4,
+        4.5,
+        4.6
+      ]
     }
   }
   ```
@@ -437,13 +473,19 @@ GET {{baseUrl}}/api/customers/{{customerId}}
 GET {{baseUrl}}/api/stats/summary
 
 ### 6. Get Branch Stats
-GET {{baseUrl}}/api/stats/by-branch
+GET {{baseUrl}}/api/stats/branches
 
 ### 7. List Feedbacks
 GET {{baseUrl}}/api/feedbacks
 
 ### 8. List Feedbacks with Filter
 GET {{baseUrl}}/api/feedbacks?category=service&rating=5
+
+### 8.1 Get Feedback Stats for Charts
+GET {{baseUrl}}/api/feedbacks/stats
+
+### 8.2 Get Feedback Stats for Siam Branch
+GET {{baseUrl}}/api/feedbacks/stats?branch=สยาม
 
 ### 9. Create Feedback
 POST {{baseUrl}}/api/feedbacks

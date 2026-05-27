@@ -1,4 +1,4 @@
-﻿package model
+package model
 
 import (
 	"time"
@@ -8,6 +8,7 @@ import (
 type Feedback struct {
 	Id         primitive.ObjectID `json:"id" bson:"_id"`
 	CustomerId primitive.ObjectID `json:"customer_id" bson:"customer_id"`
+	Branch     string             `json:"branch" bson:"branch"`
 	Rating     int                `json:"rating" bson:"rating"`
 	Comment    string             `json:"comment" bson:"comment"`
 	Category   string             `json:"category" bson:"category"`

@@ -1,4 +1,4 @@
-﻿package handler
+package handler
 
 import (
 	"log/slog"
@@ -30,4 +30,16 @@ func (h *FeedbackQueryHandler) ListFeedbacks(c *fiber.Ctx) error {
 	}
 
 	return response.OK(c, "feedbacks retrieved", feedbacks)
+}
+
+func (h *FeedbackQueryHandler) GetFeedbackStats(c *fiber.Ctx) error {
+	branch := c.Query("branch")
+
+	stats, err := h.usecase.GetStats(c.Context(), branch)
+	if err != nil {
+		slog.Error("get feedback stats failed", "error", err)
+		return response.ErrorServer(c, "failed to get feedback stats", err)
+	}
+
+	return response.OK(c, "feedback stats retrieved", stats)
 }

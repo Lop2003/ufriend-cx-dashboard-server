@@ -1,4 +1,4 @@
-﻿package usecase
+package usecase
 
 import (
 	"context"
@@ -10,6 +10,7 @@ import (
 
 type FeedbackQueryUsecase interface {
 	ListFeedbacks(ctx context.Context, filter *dto.FeedbackFilter) ([]*model.Feedback, error)
+	GetStats(ctx context.Context, branch string) (*dto.FeedbackStatsResponse, error)
 }
 
 type feedbackQueryUsecase struct {
