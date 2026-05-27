@@ -12,5 +12,5 @@ func RegisterCustomerHTTPRoutes(app *fiber.App, qh *queryHandler.CustomerQueryHa
 
 	stats := app.Group("/api/stats")
 	stats.Get("/summary", qh.GetSummary)
-	stats.Get("/by-branch", qh.GetByBranch)
+	stats.Get("/branches", qh.GetByBranch)
 }
