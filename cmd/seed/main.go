@@ -106,7 +106,7 @@ func sentimentFromRating(rating int) string {
 func randomPhone() string {
 	prefixes := []string{"081", "082", "083", "084", "085", "086", "087", "088", "089", "095", "096", "097"}
 	prefix := prefixes[rand.Intn(len(prefixes))]
-	part1 := rand.Intn(900) + 100  // 100-999
+	part1 := rand.Intn(900) + 100   // 100-999
 	part2 := rand.Intn(9000) + 1000 // 1000-9999
 	return fmt.Sprintf("%s-%d-%d", prefix, part1, part2)
 }
@@ -132,7 +132,7 @@ func main() {
 	db.Collection("feedbacks").Drop(ctx)
 	db.Collection("follow_ups").Drop(ctx)
 
-	totalCustomers := 2000000
+	totalCustomers := 10000000
 	batchSize := 10000
 
 	customersCol := db.Collection("customers")
@@ -386,7 +386,7 @@ func main() {
 		{Keys: bson.D{{Key: "status", Value: 1}}},
 		{Keys: bson.D{{Key: "created_at", Value: -1}}},
 	})
-	
+
 	// Index on feedbacks
 	_, _ = feedbacksCol.Indexes().CreateMany(ctx, []mongo.IndexModel{
 		{Keys: bson.D{{Key: "branch", Value: 1}}},

@@ -5,6 +5,7 @@ import (
 	"regexp"
 
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"ufriend-cx-dashboard-server/internal/customer/model"
 	"ufriend-cx-dashboard-server/internal/customer/query/dto"
@@ -23,14 +24,37 @@ func (r *customerQueryRepository) FindAll(ctx context.Context, filter *dto.Custo
 	if filter.Search != "" {
 		escapedSearch := regexp.QuoteMeta(filter.Search)
 		bsonFilter["$or"] = []bson.M{
-			{"name": bson.M{"$regex": escapedSearch, "$options": "i"}},
-			{"phone": bson.M{"$regex": escapedSearch, "$options": "i"}},
-			{"product": bson.M{"$regex": escapedSearch, "$options": "i"}},
+			{"name": bson.M{"$regex": "^" + escapedSearch}},
+			{"phone": bson.M{"$regex": "^" + escapedSearch}},
+			{"product": bson.M{"$regex": "^" + escapedSearch}},
 		}
 	}
 
-	// นับจำนวน document ที่ match filter ก่อน pagination
-	total, err := collection.CountDocuments(ctx, bsonFilter)
+	// นับจำนวน document แบบจำกัด (Capped Count) ที่ 1000 รายการ เพื่อลดภาระการนับคิวรีที่ตรงกับ Search Filter
+	var total int64
+	var err error
+	if len(bsonFilter) == 0 {
+		total, err = collection.EstimatedDocumentCount(ctx)
+	} else {
+		// ใช้ Pipeline จำกัดที่ 1000 ตัว เพื่อให้ความเร็วคงที่เสมอ แม้จะตรงกับคำค้นหาหลายแสนคน
+		pipeline := mongo.Pipeline{
+			{{Key: "$match", Value: bsonFilter}},
+			{{Key: "$limit", Value: 1000}},
+			{{Key: "$count", Value: "count"}},
+		}
+		cursorCount, errCount := collection.Aggregate(ctx, pipeline)
+		if errCount == nil {
+			defer cursorCount.Close(ctx)
+			var countResults []struct {
+				Count int64 `bson:"count"`
+			}
+			if errCount = cursorCount.All(ctx, &countResults); errCount == nil && len(countResults) > 0 {
+				total = countResults[0].Count
+			}
+		} else {
+			err = errCount
+		}
+	}
 	if err != nil {
 		return nil, 0, err
 	}

@@ -12,24 +12,37 @@ import (
 func (r *customerQueryRepository) GetSummary(ctx context.Context) (*dto.SummaryResponse, error) {
 	customers := r.db.Collection("customers")
 
-	total, err := customers.CountDocuments(ctx, bson.M{})
+	// ใช้ Aggregate เพียง 1 ครั้งเพื่อคำนวณสถิติลูกค้าทั้งหมด ลดภาระฐานข้อมูลจากล้านๆ เรคคอร์ดอย่างมหาศาล
+	cursorStats, err := customers.Aggregate(ctx, mongo.Pipeline{
+		{{Key: "$group", Value: bson.M{
+			"_id":   "$status",
+			"count": bson.M{"$sum": 1},
+		}}},
+	})
 	if err != nil {
-		return nil, fmt.Errorf("count customers: %w", err)
+		return nil, fmt.Errorf("aggregate customer status stats: %w", err)
+	}
+	defer cursorStats.Close(ctx)
+
+	var results []struct {
+		Status string `bson:"_id"`
+		Count  int    `bson:"count"`
+	}
+	if err := cursorStats.All(ctx, &results); err != nil {
+		return nil, fmt.Errorf("decode status stats: %w", err)
 	}
 
-	overdueCount, err := customers.CountDocuments(ctx, bson.M{"status": "overdue"})
-	if err != nil {
-		return nil, fmt.Errorf("count overdue: %w", err)
-	}
-
-	activeCount, err := customers.CountDocuments(ctx, bson.M{"status": "active"})
-	if err != nil {
-		return nil, fmt.Errorf("count active: %w", err)
-	}
-
-	completedCount, err := customers.CountDocuments(ctx, bson.M{"status": "completed"})
-	if err != nil {
-		return nil, fmt.Errorf("count completed: %w", err)
+	var total, overdueCount, activeCount, completedCount int64
+	for _, res := range results {
+		total += int64(res.Count)
+		switch res.Status {
+		case "overdue":
+			overdueCount = int64(res.Count)
+		case "active":
+			activeCount = int64(res.Count)
+		case "completed":
+			completedCount = int64(res.Count)
+		}
 	}
 
 	// Average rating from feedbacks
