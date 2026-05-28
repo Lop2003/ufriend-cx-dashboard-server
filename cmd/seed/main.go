@@ -385,6 +385,9 @@ func main() {
 		{Keys: bson.D{{Key: "branch", Value: 1}}},
 		{Keys: bson.D{{Key: "status", Value: 1}}},
 		{Keys: bson.D{{Key: "created_at", Value: -1}}},
+		{Keys: bson.D{{Key: "name", Value: 1}}},
+		{Keys: bson.D{{Key: "phone", Value: 1}}},
+		{Keys: bson.D{{Key: "product", Value: 1}}},
 	})
 
 	// Index on feedbacks
