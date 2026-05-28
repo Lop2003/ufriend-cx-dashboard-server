@@ -1,9 +1,11 @@
-﻿package handler
+package handler
 
 import (
+	"errors"
 	"log/slog"
 
 	"github.com/gofiber/fiber/v2"
+	"go.mongodb.org/mongo-driver/mongo"
 	"ufriend-cx-dashboard-server/internal/follow_up/command/dto"
 	"ufriend-cx-dashboard-server/internal/follow_up/command/usecase"
 	"ufriend-cx-dashboard-server/pkg/response"
@@ -36,6 +38,9 @@ func (h *FollowUpCommandHandler) CreateFollowUp(c *fiber.Ctx) error {
 	followUp, err := h.usecase.CreateFollowUp(c.Context(), &req)
 	if err != nil {
 		slog.Error("create follow up failed", "error", err)
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return response.Error(c, fiber.StatusNotFound, "customer not found", "ERR_NOT_FOUND")
+		}
 		return response.ErrorServer(c, "failed to create follow up", err)
 	}
 
@@ -60,6 +65,9 @@ func (h *FollowUpCommandHandler) UpdateStatus(c *fiber.Ctx) error {
 
 	if err := h.usecase.UpdateStatus(c.Context(), id, &req); err != nil {
 		slog.Error("update follow up status failed", "error", err)
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return response.Error(c, fiber.StatusNotFound, "follow up not found", "ERR_NOT_FOUND")
+		}
 		return response.ErrorServer(c, "failed to update status", err)
 	}
 

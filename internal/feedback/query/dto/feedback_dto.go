@@ -6,6 +6,8 @@ type FeedbackFilter struct {
 	Category string `query:"category"`
 	Rating   int    `query:"rating"`
 	Branch   string `query:"branch"`
+	Page     int    `query:"page"`
+	Limit    int    `query:"limit"`
 }
 
 type FeedbackResponse struct {

@@ -153,8 +153,12 @@ func main() {
 		log.Fatal("Connection error:", err)
 	}
 	defer client.Disconnect(ctx)
+	dbName := os.Getenv("MONGODB_DB_NAME")
+	if dbName == "" {
+		dbName = "ufriend_cx"
+	}
 
-	db := client.Database("ufriend_cx")
+	db := client.Database(dbName)
 
 	// Drop collections
 	log.Println("🗑️ Dropping existing collections...")

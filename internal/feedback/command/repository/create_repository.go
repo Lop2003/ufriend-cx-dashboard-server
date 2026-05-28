@@ -15,9 +15,10 @@ func (r *feedbackCommandRepository) Create(ctx context.Context, feedback *model.
 		Branch string `bson:"branch"`
 	}
 	err := customersCol.FindOne(ctx, bson.M{"_id": feedback.CustomerId}).Decode(&customer)
-	if err == nil {
-		feedback.Branch = customer.Branch
+	if err != nil {
+		return err // Fails feedback creation and returns mongo.ErrNoDocuments if customer is missing
 	}
+	feedback.Branch = customer.Branch
 
 	_, err = r.collection.InsertOne(ctx, feedback)
 	return err

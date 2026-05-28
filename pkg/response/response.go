@@ -1,4 +1,4 @@
-﻿package response
+package response
 
 import "github.com/gofiber/fiber/v2"
 
@@ -18,5 +18,10 @@ func Error(c *fiber.Ctx, statusCode int, message string, errCode string) error {
 }
 
 func ErrorServer(c *fiber.Ctx, message string, err error) error {
-	return c.Status(fiber.StatusInternalServerError).JSON(APIResponse{Success: false, Message: message, Error: err.Error()})
+	errStr := "internal server error"
+	// Show detailed error messages only in development to prevent data/structure exposure
+	if env := c.IP(); env == "127.0.0.1" || env == "::1" { // Or check environment variable
+		errStr = err.Error()
+	}
+	return c.Status(fiber.StatusInternalServerError).JSON(APIResponse{Success: false, Message: message, Error: errStr})
 }

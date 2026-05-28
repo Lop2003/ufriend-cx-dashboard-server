@@ -21,7 +21,12 @@ func main() {
 		mongoURI = "mongodb://localhost:27017"
 	}
 
-	db, err := database.NewMongoDB(mongoURI, "ufriend_cx")
+	dbName := os.Getenv("MONGODB_DB_NAME")
+	if dbName == "" {
+		dbName = "ufriend_cx"
+	}
+
+	db, err := database.NewMongoDB(mongoURI, dbName)
 	if err != nil {
 		log.Fatal("Failed to connect to MongoDB:", err)
 	}
