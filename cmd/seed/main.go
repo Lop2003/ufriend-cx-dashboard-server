@@ -5,8 +5,11 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
+	"os"
+	"strings"
 	"time"
 
+	"github.com/joho/godotenv"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -114,11 +117,38 @@ func randomPhone() string {
 func main() {
 	log.Println("⚡ Starting database seeder...")
 
+	// 1. Load env variables using godotenv
+	_ = godotenv.Load()
+
+	// 2. Safeguard check: APP_ENV MUST be 'development' or 'dev'
+	appEnv := os.Getenv("APP_ENV")
+	if appEnv != "development" && appEnv != "dev" {
+		log.Fatalf("❌ CRITICAL ERROR: Seeder can ONLY be run in 'development' or 'dev' environment. Current APP_ENV: '%s'", appEnv)
+	}
+
+	mongoURI := os.Getenv("MONGODB_URI")
+	if mongoURI == "" {
+		mongoURI = "mongodb://localhost:27017"
+	}
+
+	// 3. Double safeguard check: inspect MONGODB_URI to ensure it points to local environment
+	isLocalhost := false
+	localHosts := []string{"localhost", "127.0.0.1", "::1", "mongodb"}
+	for _, host := range localHosts {
+		if strings.Contains(mongoURI, host) {
+			isLocalhost = true
+			break
+		}
+	}
+	if !isLocalhost {
+		log.Fatalf("❌ CRITICAL ERROR: MONGODB_URI '%s' does not appear to be a local database. Seeder aborted to prevent data loss.", mongoURI)
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 
 	// Connect to MongoDB
-	client, err := mongo.Connect(ctx, options.Client().ApplyURI("mongodb://localhost:27017"))
+	client, err := mongo.Connect(ctx, options.Client().ApplyURI(mongoURI))
 	if err != nil {
 		log.Fatal("Connection error:", err)
 	}
@@ -396,6 +426,8 @@ func main() {
 		{Keys: bson.D{{Key: "category", Value: 1}}},
 		{Keys: bson.D{{Key: "rating", Value: 1}}},
 		{Keys: bson.D{{Key: "customer_id", Value: 1}}},
+		{Keys: bson.D{{Key: "created_at", Value: 1}}},                            // NEW index for CSAT aggregation
+		{Keys: bson.D{{Key: "branch", Value: 1}, {Key: "created_at", Value: 1}}}, // NEW compound index for filtered CSAT aggregation
 	})
 
 	elapsed := time.Since(startTime)

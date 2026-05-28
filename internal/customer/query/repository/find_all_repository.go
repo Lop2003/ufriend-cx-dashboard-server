@@ -30,16 +30,35 @@ func (r *customerQueryRepository) FindAll(ctx context.Context, filter *dto.Custo
 		}
 	}
 
-	// นับจำนวน document แบบจำกัด (Capped Count) ที่ 1000 รายการ เพื่อลดภาระการนับคิวรีที่ตรงกับ Search Filter
+	// Dynamic Bounded Count to support smooth deep pagination while keeping DB performance safe
 	var total int64
 	var err error
 	if len(bsonFilter) == 0 {
 		total, err = collection.EstimatedDocumentCount(ctx)
 	} else {
-		// ใช้ Pipeline จำกัดที่ 1000 ตัว เพื่อให้ความเร็วคงที่เสมอ แม้จะตรงกับคำค้นหาหลายแสนคน
+		page := filter.Page
+		if page < 1 {
+			page = 1
+		}
+		limit := filter.Limit
+		if limit < 1 {
+			limit = 10
+		}
+		if limit > 100 {
+			limit = 100
+		}
+
+		// Cap count at 10,000 by default, or higher if the user is deep paginating
+		countLimit := int64(10000)
+		currentPageEnd := int64(page) * int64(limit)
+		if currentPageEnd >= countLimit {
+			countLimit = currentPageEnd + int64(limit*10)
+		}
+
+		// Use pipeline with limit to ensure fast execution on 10M+ records
 		pipeline := mongo.Pipeline{
 			{{Key: "$match", Value: bsonFilter}},
-			{{Key: "$limit", Value: 1000}},
+			{{Key: "$limit", Value: countLimit}},
 			{{Key: "$count", Value: "count"}},
 		}
 		cursorCount, errCount := collection.Aggregate(ctx, pipeline)

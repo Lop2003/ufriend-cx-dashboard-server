@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -57,11 +58,57 @@ func (r *feedbackQueryRepository) GetStats(ctx context.Context, branch string) (
 		negCount = result[0].Negative
 	}
 
-	weeklyCSAT := []float64{
-		formatFeedbackRating(avgRating - 0.15),
-		formatFeedbackRating(avgRating + 0.08),
-		formatFeedbackRating(avgRating - 0.05),
-		formatFeedbackRating(avgRating),
+	// Calculate weekly CSAT (real time-series aggregation for the last 28 days)
+	now := time.Now()
+	week1Start := now.Add(-28 * 24 * time.Hour)
+
+	weeklyMatch := bson.M{
+		"created_at": bson.M{"$gte": week1Start},
+	}
+	if branch != "" {
+		weeklyMatch["branch"] = branch
+	}
+
+	weeklyPipeline := mongo.Pipeline{
+		{{Key: "$match", Value: weeklyMatch}},
+		{{Key: "$group", Value: bson.M{
+			"_id": bson.M{
+				"$floor": bson.M{
+					"$divide": bson.A{
+						bson.M{"$subtract": bson.A{"$created_at", week1Start}},
+						7 * 24 * 60 * 60 * 1000, // 7 days in milliseconds
+					},
+				},
+			},
+			"avg_rating": bson.M{"$avg": "$rating"},
+		}}},
+	}
+
+	weeklyCursor, err := r.collection.Aggregate(ctx, weeklyPipeline)
+	if err != nil {
+		return nil, fmt.Errorf("aggregate weekly csat: %w", err)
+	}
+	defer weeklyCursor.Close(ctx)
+
+	var weeklyResults []struct {
+		WeekIndex int     `bson:"_id"`
+		AvgRating float64 `bson:"avg_rating"`
+	}
+	if err := weeklyCursor.All(ctx, &weeklyResults); err != nil {
+		return nil, fmt.Errorf("decode weekly csat: %w", err)
+	}
+
+	// Initialize weekly CSAT array with overall average rating as a graceful default
+	weeklyCSAT := make([]float64, 4)
+	for i := 0; i < 4; i++ {
+		weeklyCSAT[i] = formatFeedbackRating(avgRating)
+	}
+
+	// Map results to correct week index
+	for _, res := range weeklyResults {
+		if res.WeekIndex >= 0 && res.WeekIndex < 4 {
+			weeklyCSAT[res.WeekIndex] = formatFeedbackRating(res.AvgRating)
+		}
 	}
 
 	return &dto.FeedbackStatsResponse{
@@ -69,6 +116,6 @@ func (r *feedbackQueryRepository) GetStats(ctx context.Context, branch string) (
 		PositiveCount: posCount,
 		NeutralCount:  neuCount,
 		NegativeCount: negCount,
-		WeeklyCSAT:     weeklyCSAT,
+		WeeklyCSAT:    weeklyCSAT,
 	}, nil
 }

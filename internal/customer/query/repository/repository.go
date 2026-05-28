@@ -3,9 +3,10 @@ package repository
 import (
 	"context"
 
-	"go.mongodb.org/mongo-driver/mongo"
 	"ufriend-cx-dashboard-server/internal/customer/model"
 	"ufriend-cx-dashboard-server/internal/customer/query/dto"
+
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 type CustomerQueryRepository interface {
