@@ -41,7 +41,7 @@ func main() {
 
 	// Middleware
 	app.Use(middleware.RecoverConfig())
-	app.Use(middleware.CORSConfig())
+	app.Use(middleware.CORSConfig(os.Getenv("CORS_ORIGINS")))
 
 	// Health check
 	app.Get("/health", func(c *fiber.Ctx) error {
@@ -60,7 +60,9 @@ func main() {
 	larkAccountsURL := os.Getenv("LARK_ACCOUNTS_URL")
 	larkOAuthScope := os.Getenv("LARK_OAUTH_SCOPE")
 
-	if larkAppID != "" && larkAppSecret != "" && larkRedirectURI != "" {
+	authEnabled := larkAppID != "" && larkAppSecret != "" && larkRedirectURI != ""
+
+	if authEnabled {
 		authDomain := auth.NewAuthDomain(db.GetDatabase(), auth.Config{
 			AppID:           larkAppID,
 			AppSecret:       larkAppSecret,
@@ -75,15 +77,22 @@ func main() {
 		log.Println("⚠️ Lark OAuth disabled: set LARK_APP_ID, LARK_APP_SECRET, LARK_REDIRECT_URI")
 	}
 
-	// Register domains
+	// Protected API group — ใช้ auth middleware เฉพาะเมื่อ Lark OAuth enabled
+	// เพื่อไม่ block dev workflow ที่ไม่ได้ setup Lark
+	protected := app.Group("")
+	if authEnabled {
+		protected.Use(middleware.SessionAuth(db.GetDatabase()))
+	}
+
+	// Register domains ภายใต้ protected group
 	customerDomain := customer.NewCustomerDomain(db.GetDatabase())
-	customerDomain.RegisterRoutes(app)
+	customerDomain.RegisterRoutes(protected)
 
 	feedbackDomain := feedback.NewFeedbackDomain(db.GetDatabase())
-	feedbackDomain.RegisterRoutes(app)
+	feedbackDomain.RegisterRoutes(protected)
 
 	followUpDomain := follow_up.NewFollowUpDomain(db.GetDatabase())
-	followUpDomain.RegisterRoutes(app)
+	followUpDomain.RegisterRoutes(protected)
 
 	port := os.Getenv("PORT")
 	if port == "" {

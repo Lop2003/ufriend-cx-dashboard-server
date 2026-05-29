@@ -5,8 +5,8 @@ import (
 	commandHandler "ufriend-cx-dashboard-server/internal/follow_up/command/handler"
 )
 
-func RegisterFollowUpHTTPRoutes(app *fiber.App, ch *commandHandler.FollowUpCommandHandler) {
-	api := app.Group("/api/follow-ups")
+func RegisterFollowUpHTTPRoutes(router fiber.Router, ch *commandHandler.FollowUpCommandHandler) {
+	api := router.Group("/api/follow-ups")
 	api.Post("/", ch.CreateFollowUp)
 	api.Patch("/:id", ch.UpdateStatus)
 }

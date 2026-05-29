@@ -2,7 +2,7 @@ package auth
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -42,7 +42,10 @@ func NewAuthDomain(db *mongo.Database, cfg Config) *AuthDomain {
 			Options: options.Index().SetUnique(true),
 		})
 		if err != nil {
-			log.Printf("⚠️ Warning: Failed to create auth_sessions index: %v", err)
+			slog.Error("failed to create auth_sessions index",
+				"collection", "auth_sessions",
+				"error", err,
+			)
 		}
 	}()
 

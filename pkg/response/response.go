@@ -1,6 +1,10 @@
 package response
 
-import "github.com/gofiber/fiber/v2"
+import (
+	"os"
+
+	"github.com/gofiber/fiber/v2"
+)
 
 type APIResponse struct {
 	Success bool        `json:"success"`
@@ -17,10 +21,11 @@ func Error(c *fiber.Ctx, statusCode int, message string, errCode string) error {
 	return c.Status(statusCode).JSON(APIResponse{Success: false, Message: message, Error: errCode})
 }
 
+// ErrorServer ส่ง 500 response — แสดง error detail เฉพาะ development เท่านั้น
+// ใช้ APP_ENV env var แทนการเช็ค IP เพื่อให้ปลอดภัยเมื่ออยู่หลัง reverse proxy
 func ErrorServer(c *fiber.Ctx, message string, err error) error {
 	errStr := "internal server error"
-	// Show detailed error messages only in development to prevent data/structure exposure
-	if env := c.IP(); env == "127.0.0.1" || env == "::1" { // Or check environment variable
+	if os.Getenv("APP_ENV") != "production" {
 		errStr = err.Error()
 	}
 	return c.Status(fiber.StatusInternalServerError).JSON(APIResponse{Success: false, Message: message, Error: errStr})

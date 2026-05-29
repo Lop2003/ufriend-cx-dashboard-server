@@ -5,12 +5,13 @@ import (
 	queryHandler "ufriend-cx-dashboard-server/internal/customer/query/handler"
 )
 
-func RegisterCustomerHTTPRoutes(app *fiber.App, qh *queryHandler.CustomerQueryHandler) {
-	api := app.Group("/api/customers")
+func RegisterCustomerHTTPRoutes(router fiber.Router, qh *queryHandler.CustomerQueryHandler) {
+	api := router.Group("/api/customers")
 	api.Get("/", qh.ListCustomers)
 	api.Get("/:id", qh.GetCustomer)
 
-	stats := app.Group("/api/stats")
+	stats := router.Group("/api/stats")
 	stats.Get("/summary", qh.GetSummary)
 	stats.Get("/branches", qh.GetByBranch)
 }
+

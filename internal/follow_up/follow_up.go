@@ -23,6 +23,6 @@ func NewFollowUpDomain(db *mongo.Database) *FollowUpDomain {
 	}
 }
 
-func (d *FollowUpDomain) RegisterRoutes(app *fiber.App) {
-	http.RegisterFollowUpHTTPRoutes(app, d.commandHandler)
+func (d *FollowUpDomain) RegisterRoutes(router fiber.Router) {
+	http.RegisterFollowUpHTTPRoutes(router, d.commandHandler)
 }

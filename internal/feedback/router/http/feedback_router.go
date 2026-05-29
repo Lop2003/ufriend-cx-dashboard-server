@@ -6,8 +6,8 @@ import (
 	queryHandler "ufriend-cx-dashboard-server/internal/feedback/query/handler"
 )
 
-func RegisterFeedbackHTTPRoutes(app *fiber.App, qh *queryHandler.FeedbackQueryHandler, ch *commandHandler.FeedbackCommandHandler) {
-	api := app.Group("/api/feedbacks")
+func RegisterFeedbackHTTPRoutes(router fiber.Router, qh *queryHandler.FeedbackQueryHandler, ch *commandHandler.FeedbackCommandHandler) {
+	api := router.Group("/api/feedbacks")
 	api.Get("/", qh.ListFeedbacks)
 	api.Get("/stats", qh.GetFeedbackStats)
 	api.Post("/", ch.CreateFeedback)

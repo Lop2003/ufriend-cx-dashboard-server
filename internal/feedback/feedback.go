@@ -32,6 +32,6 @@ func NewFeedbackDomain(db *mongo.Database) *FeedbackDomain {
 	}
 }
 
-func (d *FeedbackDomain) RegisterRoutes(app *fiber.App) {
-	http.RegisterFeedbackHTTPRoutes(app, d.queryHandler, d.commandHandler)
+func (d *FeedbackDomain) RegisterRoutes(router fiber.Router) {
+	http.RegisterFeedbackHTTPRoutes(router, d.queryHandler, d.commandHandler)
 }

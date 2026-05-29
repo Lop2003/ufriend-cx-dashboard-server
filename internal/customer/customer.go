@@ -2,7 +2,7 @@ package customer
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -21,6 +21,7 @@ type CustomerDomain struct {
 func NewCustomerDomain(db *mongo.Database) *CustomerDomain {
 	// สร้างดัชนี (Indexes) ทั้งหมดแบบ Background ในรูปแบบ Asynchronous เพื่อเพิ่มสปีดการเสิร์ชระดับ 2 ล้านเรคคอร์ด
 	go func() {
+		start := time.Now()
 		// ให้เวลาเพียงพอสำหรับการสร้าง Index บนข้อมูลขนาดใหญ่ระดับ 10 ล้านเรคคอร์ด
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
 		defer cancel()
@@ -37,9 +38,17 @@ func NewCustomerDomain(db *mongo.Database) *CustomerDomain {
 		})
 
 		if err != nil {
-			log.Printf("⚠️ Warning: Failed to create MongoDB search indexes: %v", err)
+			slog.Error("failed to create customer indexes",
+				"collection", "customers",
+				"duration", time.Since(start).String(),
+				"error", err,
+			)
 		} else {
-			log.Println("⚡ Successfully verified and created uFriend high-performance search indexes (Name, Phone, Product, Branch, Status)!")
+			slog.Info("customer indexes verified",
+				"collection", "customers",
+				"indexes", []string{"branch", "status", "created_at", "name", "phone", "product"},
+				"duration", time.Since(start).String(),
+			)
 		}
 	}()
 
@@ -52,6 +61,6 @@ func NewCustomerDomain(db *mongo.Database) *CustomerDomain {
 	}
 }
 
-func (d *CustomerDomain) RegisterRoutes(app *fiber.App) {
-	http.RegisterCustomerHTTPRoutes(app, d.queryHandler)
+func (d *CustomerDomain) RegisterRoutes(router fiber.Router) {
+	http.RegisterCustomerHTTPRoutes(router, d.queryHandler)
 }
