@@ -13,16 +13,25 @@ func ErrorHandler(c *fiber.Ctx, err error) error {
 		code = e.Code
 	}
 
-	slog.Error("unhandled error",
-		"method", c.Method(),
-		"path", c.Path(),
-		"status", code,
-		"error", err.Error(),
-	)
+	if code >= 500 {
+		slog.Error("unhandled error",
+			"method", c.Method(),
+			"path", c.Path(),
+			"status", code,
+			"error", err.Error(),
+		)
+	}
+
+	message := "internal server error"
+	if code == fiber.StatusNotFound {
+		message = "ไม่พบ API ที่เรียก"
+	} else if code == fiber.StatusUnauthorized {
+		message = "ไม่ได้รับอนุญาต"
+	}
 
 	return c.Status(code).JSON(fiber.Map{
 		"success": false,
-		"message": "internal server error",
+		"message": message,
 		"error":   err.Error(),
 	})
 }
