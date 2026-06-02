@@ -45,7 +45,9 @@ func (h *CustomerQueryHandler) GetCustomer(c *fiber.Ctx) error {
 }
 
 func (h *CustomerQueryHandler) GetSummary(c *fiber.Ctx) error {
-	summary, err := h.usecase.GetSummary(c.Context())
+	period := c.Query("period")
+
+	summary, err := h.usecase.GetSummary(c.Context(), period)
 	if err != nil {
 		slog.Error("get summary failed", "error", err)
 		return response.ErrorServer(c, "failed to get summary", err)
@@ -56,7 +58,9 @@ func (h *CustomerQueryHandler) GetSummary(c *fiber.Ctx) error {
 
 func (h *CustomerQueryHandler) GetByBranch(c *fiber.Ctx) error {
 	branch := c.Query("branch")
-	stats, err := h.usecase.GetByBranch(c.Context())
+	period := c.Query("period")
+
+	stats, err := h.usecase.GetByBranch(c.Context(), period)
 	if err != nil {
 		slog.Error("get by branch failed", "error", err)
 		return response.ErrorServer(c, "failed to get branch stats", err)

@@ -8,11 +8,11 @@ import (
 	"ufriend-cx-dashboard-server/internal/customer/query/dto"
 )
 
-func (u *customerQueryUsecase) GetSummary(ctx context.Context) (*dto.SummaryResponse, error) {
+func (u *customerQueryUsecase) GetSummary(ctx context.Context, period string) (*dto.SummaryResponse, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	summary, err := u.repo.GetSummary(ctx)
+	summary, err := u.repo.GetSummary(ctx, period)
 	if err != nil {
 		return nil, fmt.Errorf("get summary: %w", err)
 	}
@@ -20,11 +20,11 @@ func (u *customerQueryUsecase) GetSummary(ctx context.Context) (*dto.SummaryResp
 	return summary, nil
 }
 
-func (u *customerQueryUsecase) GetByBranch(ctx context.Context) ([]*dto.BranchStat, error) {
+func (u *customerQueryUsecase) GetByBranch(ctx context.Context, period string) ([]*dto.BranchStat, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	stats, err := u.repo.GetByBranch(ctx)
+	stats, err := u.repo.GetByBranch(ctx, period)
 	if err != nil {
 		return nil, fmt.Errorf("get by branch: %w", err)
 	}

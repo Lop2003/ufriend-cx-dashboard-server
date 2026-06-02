@@ -3,22 +3,48 @@ package repository
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"ufriend-cx-dashboard-server/internal/customer/query/dto"
 )
 
-func (r *customerQueryRepository) GetSummary(ctx context.Context) (*dto.SummaryResponse, error) {
+// parsePeriodFilter converts a period string ("7d", "1m") into a bson.M filter on created_at.
+// Returns empty bson.M{} when period is empty or unrecognized → zero regression.
+func parsePeriodFilter(period string) bson.M {
+	var since time.Time
+	now := time.Now()
+
+	switch period {
+	case "7d":
+		since = now.AddDate(0, 0, -7)
+	case "1m":
+		since = now.AddDate(0, -1, 0)
+	default:
+		return bson.M{}
+	}
+
+	return bson.M{"created_at": bson.M{"$gte": since}}
+}
+
+func (r *customerQueryRepository) GetSummary(ctx context.Context, period string) (*dto.SummaryResponse, error) {
 	customers := r.db.Collection("customers")
 
+	// Build pipeline: optional period filter + group by status
+	periodMatch := parsePeriodFilter(period)
+
+	pipeline := mongo.Pipeline{}
+	if len(periodMatch) > 0 {
+		pipeline = append(pipeline, bson.D{{Key: "$match", Value: periodMatch}})
+	}
+	pipeline = append(pipeline, bson.D{{Key: "$group", Value: bson.M{
+		"_id":   "$status",
+		"count": bson.M{"$sum": 1},
+	}}})
+
 	// ใช้ Aggregate เพียง 1 ครั้งเพื่อคำนวณสถิติลูกค้าทั้งหมด ลดภาระฐานข้อมูลจากล้านๆ เรคคอร์ดอย่างมหาศาล
-	cursorStats, err := customers.Aggregate(ctx, mongo.Pipeline{
-		{{Key: "$group", Value: bson.M{
-			"_id":   "$status",
-			"count": bson.M{"$sum": 1},
-		}}},
-	})
+	cursorStats, err := customers.Aggregate(ctx, pipeline)
 	if err != nil {
 		return nil, fmt.Errorf("aggregate customer status stats: %w", err)
 	}
@@ -45,11 +71,14 @@ func (r *customerQueryRepository) GetSummary(ctx context.Context) (*dto.SummaryR
 		}
 	}
 
-	// Average rating from feedbacks
-	pipeline := mongo.Pipeline{
-		{{Key: "$group", Value: bson.M{"_id": nil, "avg_rating": bson.M{"$avg": "$rating"}}}},
+	// Average rating from feedbacks (with same period filter)
+	feedbackPipeline := mongo.Pipeline{}
+	if len(periodMatch) > 0 {
+		feedbackPipeline = append(feedbackPipeline, bson.D{{Key: "$match", Value: periodMatch}})
 	}
-	cursor, err := r.db.Collection("feedbacks").Aggregate(ctx, pipeline)
+	feedbackPipeline = append(feedbackPipeline, bson.D{{Key: "$group", Value: bson.M{"_id": nil, "avg_rating": bson.M{"$avg": "$rating"}}}})
+
+	cursor, err := r.db.Collection("feedbacks").Aggregate(ctx, feedbackPipeline)
 	if err != nil {
 		return nil, fmt.Errorf("avg rating: %w", err)
 	}
@@ -76,16 +105,22 @@ func (r *customerQueryRepository) GetSummary(ctx context.Context) (*dto.SummaryR
 	}, nil
 }
 
-func (r *customerQueryRepository) GetByBranch(ctx context.Context) ([]*dto.BranchStat, error) {
-	// Step 1: Aggregate customers by branch (extremely fast, no join)
-	pipelineCustomers := mongo.Pipeline{
-		{{Key: "$group", Value: bson.M{
+func (r *customerQueryRepository) GetByBranch(ctx context.Context, period string) ([]*dto.BranchStat, error) {
+	periodMatch := parsePeriodFilter(period)
+
+	// Step 1: Aggregate customers by branch (with optional period filter)
+	pipelineCustomers := mongo.Pipeline{}
+	if len(periodMatch) > 0 {
+		pipelineCustomers = append(pipelineCustomers, bson.D{{Key: "$match", Value: periodMatch}})
+	}
+	pipelineCustomers = append(pipelineCustomers,
+		bson.D{{Key: "$group", Value: bson.M{
 			"_id":            "$branch",
 			"customer_count": bson.M{"$sum": 1},
 			"overdue_count":  bson.M{"$sum": bson.M{"$cond": bson.A{bson.M{"$eq": bson.A{"$status", "overdue"}}, 1, 0}}},
 		}}},
-		{{Key: "$sort", Value: bson.M{"_id": 1}}},
-	}
+		bson.D{{Key: "$sort", Value: bson.M{"_id": 1}}},
+	)
 
 	cursorCust, err := r.db.Collection("customers").Aggregate(ctx, pipelineCustomers)
 	if err != nil {
@@ -102,13 +137,15 @@ func (r *customerQueryRepository) GetByBranch(ctx context.Context) ([]*dto.Branc
 		return nil, fmt.Errorf("decode customer branch stats: %w", err)
 	}
 
-	// Step 2: Aggregate average feedback ratings by branch (extremely fast, no join!)
-	pipelineFeedbacks := mongo.Pipeline{
-		{{Key: "$group", Value: bson.M{
-			"_id":        "$branch",
-			"avg_rating": bson.M{"$avg": "$rating"},
-		}}},
+	// Step 2: Aggregate average feedback ratings by branch (with same period filter)
+	pipelineFeedbacks := mongo.Pipeline{}
+	if len(periodMatch) > 0 {
+		pipelineFeedbacks = append(pipelineFeedbacks, bson.D{{Key: "$match", Value: periodMatch}})
 	}
+	pipelineFeedbacks = append(pipelineFeedbacks, bson.D{{Key: "$group", Value: bson.M{
+		"_id":        "$branch",
+		"avg_rating": bson.M{"$avg": "$rating"},
+	}}})
 
 	cursorFeed, err := r.db.Collection("feedbacks").Aggregate(ctx, pipelineFeedbacks)
 	if err != nil {

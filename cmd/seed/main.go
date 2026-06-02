@@ -63,17 +63,89 @@ var lastNames = []string{
 	"สุขเจริญ", "พงษ์พานิช", "วัฒนพานิช", "เกียรติขจร", "รักษ์ดี", "สิริวัฒนา", "โสภณ", "เรืองโรจน์", "ศิริวัฒน์",
 }
 
-var products = []string{
-	"iPhone 16 Pro Max", "iPad Air", "iPhone 15", "iPhone 16", "iPad Pro",
-	"MacBook Pro", "Apple Watch", "iPhone 15 Pro", "iPad Mini", "AirPods Max",
-	"iPhone 16 Pro", "MacBook Air", "Apple Watch Ultra",
+type weightedItem struct {
+	name   string
+	weight float64
 }
 
-var branches = []string{
-	"วงเวียนใหญ่", "รังสิต", "ลาดพร้าว", "สยาม", "บางนา", "ปิ่นเกล้า", "พระราม 9", "ฟิวเจอร์พาร์ค", "เมกาบางนา",
+var weightedBranches = []weightedItem{
+	{"สยาม", 0.25},
+	{"ลาดพร้าว", 0.18},
+	{"เมกาบางนา", 0.15},
+	{"ฟิวเจอร์พาร์ค", 0.12},
+	{"รังสิต", 0.10},
+	{"บางนา", 0.08},
+	{"ปิ่นเกล้า", 0.05},
+	{"พระราม 9", 0.04},
+	{"วงเวียนใหญ่", 0.03},
 }
 
-var planMonths = []int{6, 8, 10, 12, 20, 24}
+func selectWeightedBranch() string {
+	r := rand.Float64()
+	var cumulative float64
+	for _, item := range weightedBranches {
+		cumulative += item.weight
+		if r <= cumulative {
+			return item.name
+		}
+	}
+	return "สยาม" // fallback
+}
+
+var weightedProducts = []weightedItem{
+	{"iPhone 16 Pro Max", 0.20},
+	{"iPhone 16", 0.18},
+	{"iPhone 15", 0.15},
+	{"iPhone 16 Pro", 0.12},
+	{"iPhone 15 Pro", 0.10},
+	{"iPad Air", 0.07},
+	{"MacBook Air", 0.06},
+	{"Apple Watch", 0.05},
+	{"iPad Pro", 0.03},
+	{"MacBook Pro", 0.02},
+	{"Apple Watch Ultra", 0.01},
+	{"AirPods Max", 0.007},
+	{"iPad Mini", 0.003},
+}
+
+func selectWeightedProduct() string {
+	r := rand.Float64()
+	var cumulative float64
+	for _, item := range weightedProducts {
+		cumulative += item.weight
+		if r <= cumulative {
+			return item.name
+		}
+	}
+	return "iPhone 16 Pro Max" // fallback
+}
+
+type weightedPlan struct {
+	months int
+	weight float64
+}
+
+var weightedPlans = []weightedPlan{
+	{12, 0.40},
+	{24, 0.25},
+	{6, 0.15},
+	{10, 0.10},
+	{20, 0.06},
+	{8, 0.04},
+}
+
+func selectWeightedPlan() int {
+	r := rand.Float64()
+	var cumulative float64
+	for _, item := range weightedPlans {
+		cumulative += item.weight
+		if r <= cumulative {
+			return item.months
+		}
+	}
+	return 12 // fallback
+}
+
 
 var positiveComments = []string{
 	"บริการดีเยี่ยมมากครับ", "พนักงานพูดจาดี น่ารักมาก", "อนุมัติไวมาก แนะนำเลยครับ",
@@ -166,7 +238,7 @@ func main() {
 	db.Collection("feedbacks").Drop(ctx)
 	db.Collection("follow_ups").Drop(ctx)
 
-	totalCustomers := 10000000
+	totalCustomers := 2000000
 	batchSize := 10000
 
 	customersCol := db.Collection("customers")
@@ -192,21 +264,61 @@ func main() {
 		cID := primitive.NewObjectID()
 		name := firstNames[rand.Intn(len(firstNames))] + " " + lastNames[rand.Intn(len(lastNames))]
 		phone := randomPhone()
-		product := products[rand.Intn(len(products))]
-		branch := branches[rand.Intn(len(branches))]
-		plan := planMonths[rand.Intn(len(planMonths))]
+		product := selectWeightedProduct()
+		branch := selectWeightedBranch()
+		plan := selectWeightedPlan()
 
-		// Distribute status: 70% active, 15% completed, 15% overdue
+		// Distribute status based on branch weights for highly varied performance indicators
 		statusRand := rand.Float64()
 		status := "active"
-		if statusRand < 0.15 {
-			status = "completed"
-		} else if statusRand < 0.30 {
-			status = "overdue"
+		switch branch {
+		case "สยาม", "เมกาบางนา":
+			// Premium branches: high active, low overdue
+			if statusRand < 0.04 {
+				status = "overdue"
+			} else if statusRand < 0.20 {
+				status = "completed"
+			}
+		case "บางนา", "วงเวียนใหญ่":
+			// Underperforming branches: higher overdue
+			if statusRand < 0.30 {
+				status = "overdue"
+			} else if statusRand < 0.45 {
+				status = "completed"
+			}
+		case "ลาดพร้าว", "พระราม 9":
+			// Medium branches
+			if statusRand < 0.20 {
+				status = "overdue"
+			} else if statusRand < 0.35 {
+				status = "completed"
+			}
+		default:
+			// Default distribution
+			if statusRand < 0.15 {
+				status = "overdue"
+			} else if statusRand < 0.30 {
+				status = "completed"
+			}
 		}
 
-		// CreatedAt in the last 365 days
-		createdAt := time.Now().AddDate(0, 0, -rand.Intn(365))
+		// 1. Growth trend over the last 365 days (quadratic skew towards recent dates)
+		rDays := rand.Float64()
+		daysAgo := int(365.0 * rDays * rDays)
+
+		candidateDate := time.Now().AddDate(0, 0, -daysAgo)
+
+		// 2. Weekly seasonality: Concentrate registrations on weekends (Fri, Sat, Sun)
+		wd := candidateDate.Weekday()
+		if wd >= time.Monday && wd <= time.Thursday && rand.Float64() < 0.35 {
+			candidateDate = candidateDate.AddDate(0, 0, int(time.Friday-wd))
+		}
+
+		// Ensure no future dates
+		if candidateDate.After(time.Now()) {
+			candidateDate = time.Now()
+		}
+		createdAt := candidateDate
 
 		customer := Customer{
 			Id:         cID,
@@ -290,9 +402,61 @@ func main() {
 				comment = negativeComments[rand.Intn(len(negativeComments))]
 			}
 
-			category := categories[rand.Intn(len(categories))]
+			// Category bias based on rating and branch for robust, insightful charts
+			var category string
+			catRand := rand.Float64()
+			if rating <= 2 {
+				// Complaints bias
+				if branch == "บางนา" || branch == "วงเวียนใหญ่" {
+					if catRand < 0.50 {
+						category = "payment"
+					} else if catRand < 0.80 {
+						category = "service"
+					} else if catRand < 0.90 {
+						category = "branch"
+					} else {
+						category = "product"
+					}
+				} else if branch == "ลาดพร้าว" {
+					// Service issues (queuing)
+					if catRand < 0.60 {
+						category = "service"
+					} else if catRand < 0.80 {
+						category = "branch"
+					} else if catRand < 0.95 {
+						category = "payment"
+					} else {
+						category = "product"
+					}
+				} else {
+					if catRand < 0.40 {
+						category = "service"
+					} else if catRand < 0.75 {
+						category = "payment"
+					} else if catRand < 0.90 {
+						category = "branch"
+					} else {
+						category = "product"
+					}
+				}
+			} else {
+				// Positive feedback bias
+				if catRand < 0.45 {
+					category = "product"
+				} else if catRand < 0.80 {
+					category = "service"
+				} else if catRand < 0.90 {
+					category = "branch"
+				} else {
+					category = "payment"
+				}
+			}
+
 			sentiment := sentimentFromRating(rating)
 			feedbackDate = createdAt.Add(time.Duration(rand.Intn(24*7)) * time.Hour) // Feedback within a week
+			if feedbackDate.After(time.Now()) {
+				feedbackDate = time.Now()
+			}
 
 			feedback := Feedback{
 				Id:         primitive.NewObjectID(),
@@ -346,6 +510,9 @@ func main() {
 				followUpDate = feedbackDate.Add(time.Duration(rand.Intn(24*3)) * time.Hour) // Followup within 3 days of feedback
 			} else {
 				followUpDate = createdAt.Add(time.Duration(rand.Intn(24*14)) * time.Hour) // Followup within 2 weeks of creation
+			}
+			if followUpDate.After(time.Now()) {
+				followUpDate = time.Now()
 			}
 
 			followUp := FollowUp{

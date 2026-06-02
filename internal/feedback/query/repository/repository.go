@@ -1,4 +1,4 @@
-﻿package repository
+package repository
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 
 type FeedbackQueryRepository interface {
 	FindAll(ctx context.Context, filter *dto.FeedbackFilter) ([]*model.Feedback, error)
-	GetStats(ctx context.Context, branch string) (*dto.FeedbackStatsResponse, error)
+	GetStats(ctx context.Context, branch string, period string) (*dto.FeedbackStatsResponse, error)
 }
 
 type feedbackQueryRepository struct {

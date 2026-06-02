@@ -34,8 +34,9 @@ func (h *FeedbackQueryHandler) ListFeedbacks(c *fiber.Ctx) error {
 
 func (h *FeedbackQueryHandler) GetFeedbackStats(c *fiber.Ctx) error {
 	branch := c.Query("branch")
+	period := c.Query("period")
 
-	stats, err := h.usecase.GetStats(c.Context(), branch)
+	stats, err := h.usecase.GetStats(c.Context(), branch, period)
 	if err != nil {
 		slog.Error("get feedback stats failed", "error", err)
 		return response.ErrorServer(c, "failed to get feedback stats", err)

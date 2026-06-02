@@ -12,8 +12,8 @@ import (
 type CustomerQueryRepository interface {
 	FindAll(ctx context.Context, filter *dto.CustomerFilter) ([]*model.Customer, int64, error)
 	FindByID(ctx context.Context, id string) (*dto.CustomerDetailResponse, error)
-	GetSummary(ctx context.Context) (*dto.SummaryResponse, error)
-	GetByBranch(ctx context.Context) ([]*dto.BranchStat, error)
+	GetSummary(ctx context.Context, period string) (*dto.SummaryResponse, error)
+	GetByBranch(ctx context.Context, period string) ([]*dto.BranchStat, error)
 }
 
 type customerQueryRepository struct {

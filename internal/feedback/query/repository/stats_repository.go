@@ -14,10 +14,34 @@ func formatFeedbackRating(val float64) float64 {
 	return float64(int(val*10)) / 10.0
 }
 
-func (r *feedbackQueryRepository) GetStats(ctx context.Context, branch string) (*dto.FeedbackStatsResponse, error) {
+// parsePeriodFilter converts a period string ("7d", "1m") into a bson.M filter on created_at.
+// Returns empty bson.M{} when period is empty or unrecognized → zero regression.
+func parseFeedbackPeriodFilter(period string) bson.M {
+	var since time.Time
+	now := time.Now()
+
+	switch period {
+	case "7d":
+		since = now.AddDate(0, 0, -7)
+	case "1m":
+		since = now.AddDate(0, -1, 0)
+	default:
+		return bson.M{}
+	}
+
+	return bson.M{"created_at": bson.M{"$gte": since}}
+}
+
+func (r *feedbackQueryRepository) GetStats(ctx context.Context, branch string, period string) (*dto.FeedbackStatsResponse, error) {
 	matchStage := bson.M{}
 	if branch != "" {
 		matchStage["branch"] = branch
+	}
+
+	// Merge period filter into matchStage
+	periodFilter := parseFeedbackPeriodFilter(period)
+	for k, v := range periodFilter {
+		matchStage[k] = v
 	}
 
 	pipeline := mongo.Pipeline{
