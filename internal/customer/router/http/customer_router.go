@@ -13,5 +13,6 @@ func RegisterCustomerHTTPRoutes(router fiber.Router, qh *queryHandler.CustomerQu
 	stats := router.Group("/api/stats")
 	stats.Get("/summary", qh.GetSummary)
 	stats.Get("/branches", qh.GetByBranch)
+	stats.Get("/daily", qh.GetDailyStats)
 }
 

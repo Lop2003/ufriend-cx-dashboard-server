@@ -78,3 +78,15 @@ func (h *CustomerQueryHandler) GetByBranch(c *fiber.Ctx) error {
 
 	return response.OK(c, "branch stats retrieved", stats)
 }
+
+func (h *CustomerQueryHandler) GetDailyStats(c *fiber.Ctx) error {
+	period := c.Query("period")
+
+	stats, err := h.usecase.GetDailyStats(c.Context(), period)
+	if err != nil {
+		slog.Error("get daily stats failed", "error", err)
+		return response.ErrorServer(c, "failed to get daily stats", err)
+	}
+
+	return response.OK(c, "daily stats retrieved", stats)
+}

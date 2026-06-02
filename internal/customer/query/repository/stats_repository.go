@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -181,4 +182,86 @@ func (r *customerQueryRepository) GetByBranch(ctx context.Context, period string
 	}
 
 	return stats, nil
+}
+
+func (r *customerQueryRepository) GetDailyStats(ctx context.Context, period string) ([]bson.M, error) {
+	periodMatch := parsePeriodFilter(period)
+
+	pipeline := mongo.Pipeline{}
+	if len(periodMatch) > 0 {
+		pipeline = append(pipeline, bson.D{{Key: "$match", Value: periodMatch}})
+	}
+
+	pipeline = append(pipeline,
+		bson.D{{Key: "$project", Value: bson.M{
+			"branch": 1,
+			"date": bson.M{
+				"$dateToString": bson.M{
+					"format": "%Y-%m-%d",
+					"date":   "$created_at",
+				},
+			},
+		}}},
+		bson.D{{Key: "$group", Value: bson.M{
+			"_id": bson.M{
+				"date":   "$date",
+				"branch": "$branch",
+			},
+			"count": bson.M{"$sum": 1},
+		}}},
+		bson.D{{Key: "$sort", Value: bson.D{
+			{Key: "_id.date", Value: 1},
+		}}},
+	)
+
+	cursor, err := r.db.Collection("customers").Aggregate(ctx, pipeline)
+	if err != nil {
+		return nil, fmt.Errorf("aggregate daily stats: %w", err)
+	}
+	defer cursor.Close(ctx)
+
+	var dbResults []struct {
+		Id struct {
+			Date   string `bson:"date"`
+			Branch string `bson:"branch"`
+		} `bson:"_id"`
+		Count int `bson:"count"`
+	}
+	if err := cursor.All(ctx, &dbResults); err != nil {
+		return nil, fmt.Errorf("decode daily stats: %w", err)
+	}
+
+	var formatted []bson.M
+	rowMap := make(map[string]bson.M)
+	var dateKeys []string
+
+	for _, res := range dbResults {
+		date := res.Id.Date
+		branch := res.Id.Branch
+		count := res.Count
+
+		if date == "" {
+			continue
+		}
+
+		row, exists := rowMap[date]
+		if !exists {
+			row = bson.M{"date": date}
+			rowMap[date] = row
+			dateKeys = append(dateKeys, date)
+		}
+
+		safeKey := strings.ReplaceAll(branch, " ", "_")
+		row[safeKey] = count
+	}
+
+	for _, dateKey := range dateKeys {
+		formatted = append(formatted, rowMap[dateKey])
+	}
+
+	if formatted == nil {
+		formatted = []bson.M{}
+	}
+
+	return formatted, nil
 }

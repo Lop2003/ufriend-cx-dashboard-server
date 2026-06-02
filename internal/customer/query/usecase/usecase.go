@@ -5,6 +5,8 @@ import (
 
 	"ufriend-cx-dashboard-server/internal/customer/query/dto"
 	"ufriend-cx-dashboard-server/internal/customer/query/repository"
+
+	"go.mongodb.org/mongo-driver/bson"
 )
 
 type CustomerQueryUsecase interface {
@@ -12,6 +14,7 @@ type CustomerQueryUsecase interface {
 	GetCustomer(ctx context.Context, id string) (*dto.CustomerDetailResponse, error)
 	GetSummary(ctx context.Context, period string) (*dto.SummaryResponse, error)
 	GetByBranch(ctx context.Context, period string) ([]*dto.BranchStat, error)
+	GetDailyStats(ctx context.Context, period string) ([]bson.M, error)
 }
 
 type customerQueryUsecase struct {

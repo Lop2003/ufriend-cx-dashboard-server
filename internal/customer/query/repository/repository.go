@@ -6,6 +6,7 @@ import (
 	"ufriend-cx-dashboard-server/internal/customer/model"
 	"ufriend-cx-dashboard-server/internal/customer/query/dto"
 
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
@@ -14,6 +15,7 @@ type CustomerQueryRepository interface {
 	FindByID(ctx context.Context, id string) (*dto.CustomerDetailResponse, error)
 	GetSummary(ctx context.Context, period string) (*dto.SummaryResponse, error)
 	GetByBranch(ctx context.Context, period string) ([]*dto.BranchStat, error)
+	GetDailyStats(ctx context.Context, period string) ([]bson.M, error)
 }
 
 type customerQueryRepository struct {

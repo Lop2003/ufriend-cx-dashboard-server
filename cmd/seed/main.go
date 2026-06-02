@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"math"
 	"math/rand"
 	"os"
 	"strings"
@@ -302,19 +303,21 @@ func main() {
 			}
 		}
 
-		// 1. Growth trend over the last 365 days (quadratic skew towards recent dates)
+		// 1. Growth trend over the last 365 days (smooth growing trend using exponent 1.3 to avoid extreme spikes)
 		rDays := rand.Float64()
-		daysAgo := int(365.0 * rDays * rDays)
+		daysAgo := int(365.0 * math.Pow(rDays, 1.3))
 
 		candidateDate := time.Now().AddDate(0, 0, -daysAgo)
 
 		// 2. Weekly seasonality: Concentrate registrations on weekends (Fri, Sat, Sun)
+		// Shift backward to Sunday, Saturday, or Friday to prevent future dates that clump on Today
 		wd := candidateDate.Weekday()
 		if wd >= time.Monday && wd <= time.Thursday && rand.Float64() < 0.35 {
-			candidateDate = candidateDate.AddDate(0, 0, int(time.Friday-wd))
+			daysToSubtract := int(wd) + rand.Intn(3) // Monday (1) -> subtracts 1, 2, or 3 days -> Sun, Sat, Fri
+			candidateDate = candidateDate.AddDate(0, 0, -daysToSubtract)
 		}
 
-		// Ensure no future dates
+		// Ensure no future dates (safeguard)
 		if candidateDate.After(time.Now()) {
 			candidateDate = time.Now()
 		}
