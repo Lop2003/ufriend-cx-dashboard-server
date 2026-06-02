@@ -21,6 +21,8 @@ func parsePeriodFilter(period string) bson.M {
 		since = now.AddDate(0, 0, -7)
 	case "1m":
 		since = now.AddDate(0, -1, 0)
+	case "3m":
+		since = now.AddDate(0, -3, 0)
 	default:
 		return bson.M{}
 	}
