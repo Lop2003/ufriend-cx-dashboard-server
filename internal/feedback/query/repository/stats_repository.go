@@ -84,12 +84,30 @@ func (r *feedbackQueryRepository) GetStats(ctx context.Context, branch string, p
 		negCount = result[0].Negative
 	}
 
-	// Calculate weekly CSAT (real time-series aggregation for the last 28 days)
+	// Calculate dynamic CSAT trend (weekly or daily based on period)
+	var numPoints int
+	var stepMs int64
+	var trendStart time.Time
+
 	now := time.Now()
-	week1Start := now.Add(-28 * 24 * time.Hour)
+
+	switch period {
+	case "7d":
+		numPoints = 7
+		stepMs = 24 * 60 * 60 * 1000 // 1 day in ms
+		trendStart = now.Add(-7 * 24 * time.Hour)
+	case "3m":
+		numPoints = 12
+		stepMs = 7 * 24 * 60 * 60 * 1000 // 7 days in ms
+		trendStart = now.Add(-12 * 7 * 24 * time.Hour)
+	default: // "1m" or empty
+		numPoints = 4
+		stepMs = 7 * 24 * 60 * 60 * 1000 // 7 days in ms
+		trendStart = now.Add(-28 * 24 * time.Hour)
+	}
 
 	weeklyMatch := bson.M{
-		"created_at": bson.M{"$gte": week1Start},
+		"created_at": bson.M{"$gte": trendStart},
 	}
 	if branch != "" {
 		weeklyMatch["branch"] = branch
@@ -101,8 +119,8 @@ func (r *feedbackQueryRepository) GetStats(ctx context.Context, branch string, p
 			"_id": bson.M{
 				"$floor": bson.M{
 					"$divide": bson.A{
-						bson.M{"$subtract": bson.A{"$created_at", week1Start}},
-						7 * 24 * 60 * 60 * 1000, // 7 days in milliseconds
+						bson.M{"$subtract": bson.A{"$created_at", trendStart}},
+						stepMs,
 					},
 				},
 			},
@@ -117,23 +135,23 @@ func (r *feedbackQueryRepository) GetStats(ctx context.Context, branch string, p
 	defer weeklyCursor.Close(ctx)
 
 	var weeklyResults []struct {
-		WeekIndex int     `bson:"_id"`
+		Index     int     `bson:"_id"`
 		AvgRating float64 `bson:"avg_rating"`
 	}
 	if err := weeklyCursor.All(ctx, &weeklyResults); err != nil {
 		return nil, fmt.Errorf("decode weekly csat: %w", err)
 	}
 
-	// Initialize weekly CSAT array with overall average rating as a graceful default
-	weeklyCSAT := make([]float64, 4)
-	for i := 0; i < 4; i++ {
+	// Initialize CSAT array with overall average rating as a graceful default
+	weeklyCSAT := make([]float64, numPoints)
+	for i := 0; i < numPoints; i++ {
 		weeklyCSAT[i] = formatFeedbackRating(avgRating)
 	}
 
-	// Map results to correct week index
+	// Map results to correct index
 	for _, res := range weeklyResults {
-		if res.WeekIndex >= 0 && res.WeekIndex < 4 {
-			weeklyCSAT[res.WeekIndex] = formatFeedbackRating(res.AvgRating)
+		if res.Index >= 0 && res.Index < numPoints {
+			weeklyCSAT[res.Index] = formatFeedbackRating(res.AvgRating)
 		}
 	}
 
