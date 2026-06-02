@@ -96,14 +96,18 @@ func (r *feedbackQueryRepository) GetStats(ctx context.Context, branch string, p
 		numPoints = 7
 		stepMs = 24 * 60 * 60 * 1000 // 1 day in ms
 		trendStart = now.Add(-7 * 24 * time.Hour)
+	case "1m":
+		numPoints = 4
+		stepMs = 7 * 24 * 60 * 60 * 1000 // 7 days in ms
+		trendStart = now.Add(-28 * 24 * time.Hour)
 	case "3m":
 		numPoints = 12
 		stepMs = 7 * 24 * 60 * 60 * 1000 // 7 days in ms
 		trendStart = now.Add(-12 * 7 * 24 * time.Hour)
-	default: // "1m" or empty
-		numPoints = 4
+	default: // All Time (empty)
+		numPoints = 26
 		stepMs = 7 * 24 * 60 * 60 * 1000 // 7 days in ms
-		trendStart = now.Add(-28 * 24 * time.Hour)
+		trendStart = now.Add(-26 * 7 * 24 * time.Hour) // 182 days (6 months)
 	}
 
 	weeklyMatch := bson.M{
