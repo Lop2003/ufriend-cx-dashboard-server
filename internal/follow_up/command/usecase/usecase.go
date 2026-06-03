@@ -1,8 +1,9 @@
-﻿package usecase
+package usecase
 
 import (
 	"context"
 
+	"ufriend-cx-dashboard-server/internal/follow_up/adapter/outbound"
 	"ufriend-cx-dashboard-server/internal/follow_up/command/dto"
 	"ufriend-cx-dashboard-server/internal/follow_up/command/repository"
 	"ufriend-cx-dashboard-server/internal/follow_up/model"
@@ -14,9 +15,10 @@ type FollowUpCommandUsecase interface {
 }
 
 type followUpCommandUsecase struct {
-	repo repository.FollowUpCommandRepository
+	repo            repository.FollowUpCommandRepository
+	customerAdapter outbound.CustomerAdapter
 }
 
-func NewFollowUpCommandUsecase(repo repository.FollowUpCommandRepository) FollowUpCommandUsecase {
-	return &followUpCommandUsecase{repo: repo}
+func NewFollowUpCommandUsecase(repo repository.FollowUpCommandRepository, customerAdapter outbound.CustomerAdapter) FollowUpCommandUsecase {
+	return &followUpCommandUsecase{repo: repo, customerAdapter: customerAdapter}
 }

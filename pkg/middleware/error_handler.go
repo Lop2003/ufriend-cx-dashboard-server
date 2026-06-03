@@ -1,7 +1,8 @@
-﻿package middleware
+package middleware
 
 import (
 	"log/slog"
+	"os"
 
 	"github.com/gofiber/fiber/v2"
 )
@@ -29,9 +30,15 @@ func ErrorHandler(c *fiber.Ctx, err error) error {
 		message = "ไม่ได้รับอนุญาต"
 	}
 
+	// ซ่อน internal error details ใน production เพื่อป้องกัน information leakage
+	errStr := err.Error()
+	if os.Getenv("APP_ENV") == "production" && code >= 500 {
+		errStr = "internal server error"
+	}
+
 	return c.Status(code).JSON(fiber.Map{
 		"success": false,
 		"message": message,
-		"error":   err.Error(),
+		"error":   errStr,
 	})
 }

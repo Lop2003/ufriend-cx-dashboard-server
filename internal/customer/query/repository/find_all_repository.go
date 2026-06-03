@@ -103,20 +103,21 @@ func (r *customerQueryRepository) FindAll(ctx context.Context, filter *dto.Custo
 
 	opts.SetSort(bson.D{{Key: sortBy, Value: sortOrder}})
 
-	// Pagination — ใช้เฉพาะเมื่อ Limit > 0
-	// ถ้า Limit = 0 → return ทุก document (ใช้สำหรับ form dropdown / branch map)
-	if filter.Limit > 0 {
-		page := filter.Page
-		if page < 1 {
-			page = 1
-		}
-		limit := filter.Limit
-		if limit > 100 {
-			limit = 100 // hard cap
-		}
-		opts.SetSkip(int64((page - 1) * limit))
-		opts.SetLimit(int64(limit))
+	// Pagination — บังคับ limit เพื่อป้องกัน response ขนาดใหญ่เกินไป
+	// Default limit = 20 (consistent กับ feedback domain)
+	page := filter.Page
+	if page < 1 {
+		page = 1
 	}
+	limit := filter.Limit
+	if limit < 1 {
+		limit = 20 // default limit (consistent กับ feedback)
+	}
+	if limit > 100 {
+		limit = 100 // hard cap
+	}
+	opts.SetSkip(int64((page - 1) * limit))
+	opts.SetLimit(int64(limit))
 
 	cursor, err := collection.Find(ctx, bsonFilter, opts)
 	if err != nil {

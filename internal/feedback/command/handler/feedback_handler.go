@@ -22,17 +22,8 @@ func NewFeedbackCommandHandler(uc usecase.FeedbackCommandUsecase) *FeedbackComma
 
 func (h *FeedbackCommandHandler) CreateFeedback(c *fiber.Ctx) error {
 	var req dto.CreateFeedbackRequest
-	if err := c.BodyParser(&req); err != nil {
-		return response.Error(c, fiber.StatusBadRequest, "invalid request body", "ERR_PARSE")
-	}
-
-	if errs := validator.ValidateStruct(&req); len(errs) > 0 {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"success": false,
-			"message": "validation failed",
-			"error":   "ERR_VALIDATION",
-			"data":    errs,
-		})
+	if err := validator.ValidateBody(c, &req); err != nil {
+		return err // ValidateBody ส่ง response กลับเองแล้ว
 	}
 
 	feedback, err := h.usecase.CreateFeedback(c.Context(), &req)

@@ -1,4 +1,4 @@
-﻿package usecase
+package usecase
 
 import (
 	"context"
@@ -20,6 +20,12 @@ func (u *feedbackCommandUsecase) CreateFeedback(ctx context.Context, req *dto.Cr
 		return nil, fmt.Errorf("invalid customer_id: %w", err)
 	}
 
+	// ดึง branch จาก customer domain ผ่าน outbound adapter (ไม่เรียก customers collection ตรง)
+	branch, err := u.customerAdapter.GetBranchByCustomerId(ctx, customerId)
+	if err != nil {
+		return nil, fmt.Errorf("get customer branch: %w", err)
+	}
+
 	feedback := &model.Feedback{
 		Id:         primitive.NewObjectID(),
 		CustomerId: customerId,
@@ -27,6 +33,7 @@ func (u *feedbackCommandUsecase) CreateFeedback(ctx context.Context, req *dto.Cr
 		Comment:    req.Comment,
 		Category:   req.Category,
 		Sentiment:  logic.SentimentFromRating(req.Rating),
+		Branch:     branch,
 		CreatedAt:  time.Now(),
 	}
 

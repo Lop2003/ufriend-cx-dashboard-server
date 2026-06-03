@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"go.mongodb.org/mongo-driver/bson"
 	"ufriend-cx-dashboard-server/internal/customer/query/dto"
 )
 
@@ -21,11 +20,11 @@ func (u *customerQueryUsecase) GetSummary(ctx context.Context, period string) (*
 	return summary, nil
 }
 
-func (u *customerQueryUsecase) GetByBranch(ctx context.Context, period string) ([]*dto.BranchStat, error) {
+func (u *customerQueryUsecase) GetByBranch(ctx context.Context, period string, branch string) ([]*dto.BranchStat, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	stats, err := u.repo.GetByBranch(ctx, period)
+	stats, err := u.repo.GetByBranch(ctx, period, branch)
 	if err != nil {
 		return nil, fmt.Errorf("get by branch: %w", err)
 	}
@@ -33,7 +32,7 @@ func (u *customerQueryUsecase) GetByBranch(ctx context.Context, period string) (
 	return stats, nil
 }
 
-func (u *customerQueryUsecase) GetDailyStats(ctx context.Context, period string) ([]bson.M, error) {
+func (u *customerQueryUsecase) GetDailyStats(ctx context.Context, period string) ([]dto.DailyStatEntry, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 

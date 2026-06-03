@@ -8,44 +8,71 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"ufriend-cx-dashboard-server/internal/feedback/query/dto"
+	"ufriend-cx-dashboard-server/pkg/period"
 )
 
 func formatFeedbackRating(val float64) float64 {
 	return float64(int(val*10)) / 10.0
 }
 
-// parsePeriodFilter converts a period string ("7d", "1m") into a bson.M filter on created_at.
-// Returns empty bson.M{} when period is empty or unrecognized → zero regression.
-func parseFeedbackPeriodFilter(period string) bson.M {
-	var since time.Time
+// parseFeedbackPeriodFilter delegates to shared period.ParseFilter
+func parseFeedbackPeriodFilter(p string) bson.M {
+	return period.ParseFilter(p)
+}
+
+// --- Trend Config ---
+
+// trendConfig กำหนดพารามิเตอร์สำหรับ CSAT trend chart ตามช่วงเวลาที่เลือก
+type trendConfig struct {
+	NumPoints  int       // จำนวนจุดบน chart
+	StepMs     int64     // ระยะห่างระหว่างจุด (milliseconds)
+	TrendStart time.Time // เวลาเริ่มต้นของ trend
+}
+
+// resolveTrendConfig แปลง period string เป็นค่า config สำหรับ CSAT trend pipeline
+func resolveTrendConfig(period string) trendConfig {
 	now := time.Now()
 
 	switch period {
 	case "7d":
-		since = now.AddDate(0, 0, -7)
+		return trendConfig{
+			NumPoints:  7,
+			StepMs:     24 * 60 * 60 * 1000, // 1 day
+			TrendStart: now.Add(-7 * 24 * time.Hour),
+		}
 	case "1m":
-		since = now.AddDate(0, -1, 0)
+		return trendConfig{
+			NumPoints:  4,
+			StepMs:     7 * 24 * 60 * 60 * 1000, // 7 days
+			TrendStart: now.Add(-28 * 24 * time.Hour),
+		}
 	case "3m":
-		since = now.AddDate(0, -3, 0)
-	default:
-		return bson.M{}
+		return trendConfig{
+			NumPoints:  12,
+			StepMs:     7 * 24 * 60 * 60 * 1000, // 7 days
+			TrendStart: now.Add(-12 * 7 * 24 * time.Hour),
+		}
+	default: // All Time
+		return trendConfig{
+			NumPoints:  26,
+			StepMs:     7 * 24 * 60 * 60 * 1000,          // 7 days
+			TrendStart: now.Add(-26 * 7 * 24 * time.Hour), // ~6 months
+		}
 	}
-
-	return bson.M{"created_at": bson.M{"$gte": since}}
 }
 
-func (r *feedbackQueryRepository) GetStats(ctx context.Context, branch string, period string) (*dto.FeedbackStatsResponse, error) {
-	matchStage := bson.M{}
-	if branch != "" {
-		matchStage["branch"] = branch
-	}
+// --- Sentiment Stats Pipeline ---
 
-	// Merge period filter into matchStage
-	periodFilter := parseFeedbackPeriodFilter(period)
-	for k, v := range periodFilter {
-		matchStage[k] = v
-	}
+// sentimentResult ผลลัพธ์จาก aggregation สำหรับค่าเฉลี่ยและจำนวน sentiment
+type sentimentResult struct {
+	AvgRating float64
+	Positive  int
+	Neutral   int
+	Negative  int
+}
 
+// querySentimentStats รัน aggregation pipeline สำหรับ avg rating + sentiment counts
+func querySentimentStats(ctx context.Context, collection *mongo.Collection, matchStage bson.M) (*sentimentResult, error) {
 	pipeline := mongo.Pipeline{
 		{{Key: "$match", Value: matchStage}},
 		{{Key: "$group", Value: bson.M{
@@ -57,74 +84,51 @@ func (r *feedbackQueryRepository) GetStats(ctx context.Context, branch string, p
 		}}},
 	}
 
-	cursor, err := r.collection.Aggregate(ctx, pipeline)
+	cursor, err := collection.Aggregate(ctx, pipeline)
 	if err != nil {
 		return nil, fmt.Errorf("aggregate feedback stats: %w", err)
 	}
 	defer cursor.Close(ctx)
 
-	var result []struct {
+	var results []struct {
 		AvgRating float64 `bson:"avg_rating"`
 		Positive  int     `bson:"positive"`
 		Neutral   int     `bson:"neutral"`
 		Negative  int     `bson:"negative"`
 	}
-	if err := cursor.All(ctx, &result); err != nil {
+	if err := cursor.All(ctx, &results); err != nil {
 		return nil, fmt.Errorf("decode feedback stats: %w", err)
 	}
 
-	avgRating := 0.0
-	posCount := 0
-	neuCount := 0
-	negCount := 0
-	if len(result) > 0 {
-		avgRating = result[0].AvgRating
-		posCount = result[0].Positive
-		neuCount = result[0].Neutral
-		negCount = result[0].Negative
+	result := &sentimentResult{}
+	if len(results) > 0 {
+		result.AvgRating = results[0].AvgRating
+		result.Positive = results[0].Positive
+		result.Neutral = results[0].Neutral
+		result.Negative = results[0].Negative
 	}
+	return result, nil
+}
 
-	// Calculate dynamic CSAT trend (weekly or daily based on period)
-	var numPoints int
-	var stepMs int64
-	var trendStart time.Time
+// --- CSAT Trend Pipeline ---
 
-	now := time.Now()
-
-	switch period {
-	case "7d":
-		numPoints = 7
-		stepMs = 24 * 60 * 60 * 1000 // 1 day in ms
-		trendStart = now.Add(-7 * 24 * time.Hour)
-	case "1m":
-		numPoints = 4
-		stepMs = 7 * 24 * 60 * 60 * 1000 // 7 days in ms
-		trendStart = now.Add(-28 * 24 * time.Hour)
-	case "3m":
-		numPoints = 12
-		stepMs = 7 * 24 * 60 * 60 * 1000 // 7 days in ms
-		trendStart = now.Add(-12 * 7 * 24 * time.Hour)
-	default: // All Time (empty)
-		numPoints = 26
-		stepMs = 7 * 24 * 60 * 60 * 1000 // 7 days in ms
-		trendStart = now.Add(-26 * 7 * 24 * time.Hour) // 182 days (6 months)
-	}
-
-	weeklyMatch := bson.M{
-		"created_at": bson.M{"$gte": trendStart},
+// queryCSATTrend รัน aggregation pipeline สำหรับ CSAT trend chart (weekly/daily based on period)
+func queryCSATTrend(ctx context.Context, collection *mongo.Collection, branch string, cfg trendConfig, fallbackAvg float64) ([]float64, error) {
+	match := bson.M{
+		"created_at": bson.M{"$gte": cfg.TrendStart},
 	}
 	if branch != "" {
-		weeklyMatch["branch"] = branch
+		match["branch"] = branch
 	}
 
-	weeklyPipeline := mongo.Pipeline{
-		{{Key: "$match", Value: weeklyMatch}},
+	pipeline := mongo.Pipeline{
+		{{Key: "$match", Value: match}},
 		{{Key: "$group", Value: bson.M{
 			"_id": bson.M{
 				"$floor": bson.M{
 					"$divide": bson.A{
-						bson.M{"$subtract": bson.A{"$created_at", trendStart}},
-						stepMs,
+						bson.M{"$subtract": bson.A{"$created_at", cfg.TrendStart}},
+						cfg.StepMs,
 					},
 				},
 			},
@@ -132,38 +136,67 @@ func (r *feedbackQueryRepository) GetStats(ctx context.Context, branch string, p
 		}}},
 	}
 
-	weeklyCursor, err := r.collection.Aggregate(ctx, weeklyPipeline)
+	cursor, err := collection.Aggregate(ctx, pipeline)
 	if err != nil {
-		return nil, fmt.Errorf("aggregate weekly csat: %w", err)
+		return nil, fmt.Errorf("aggregate csat trend: %w", err)
 	}
-	defer weeklyCursor.Close(ctx)
+	defer cursor.Close(ctx)
 
-	var weeklyResults []struct {
+	var trendResults []struct {
 		Index     int     `bson:"_id"`
 		AvgRating float64 `bson:"avg_rating"`
 	}
-	if err := weeklyCursor.All(ctx, &weeklyResults); err != nil {
-		return nil, fmt.Errorf("decode weekly csat: %w", err)
+	if err := cursor.All(ctx, &trendResults); err != nil {
+		return nil, fmt.Errorf("decode csat trend: %w", err)
 	}
 
-	// Initialize CSAT array with overall average rating as a graceful default
-	weeklyCSAT := make([]float64, numPoints)
-	for i := 0; i < numPoints; i++ {
-		weeklyCSAT[i] = formatFeedbackRating(avgRating)
+	// Initialize array กับ overall average เป็น default (graceful fallback)
+	csatTrend := make([]float64, cfg.NumPoints)
+	for i := range csatTrend {
+		csatTrend[i] = formatFeedbackRating(fallbackAvg)
 	}
 
-	// Map results to correct index
-	for _, res := range weeklyResults {
-		if res.Index >= 0 && res.Index < numPoints {
-			weeklyCSAT[res.Index] = formatFeedbackRating(res.AvgRating)
+	// Map ผลลัพธ์จริงลงใน array ตาม index
+	for _, res := range trendResults {
+		if res.Index >= 0 && res.Index < cfg.NumPoints {
+			csatTrend[res.Index] = formatFeedbackRating(res.AvgRating)
 		}
 	}
 
+	return csatTrend, nil
+}
+
+// --- Orchestrator ---
+
+func (r *feedbackQueryRepository) GetStats(ctx context.Context, branch string, period string) (*dto.FeedbackStatsResponse, error) {
+	// 1. สร้าง match filter
+	matchStage := bson.M{}
+	if branch != "" {
+		matchStage["branch"] = branch
+	}
+	for k, v := range parseFeedbackPeriodFilter(period) {
+		matchStage[k] = v
+	}
+
+	// 2. Query sentiment stats (avg rating + positive/neutral/negative counts)
+	sentiment, err := querySentimentStats(ctx, r.collection, matchStage)
+	if err != nil {
+		return nil, err
+	}
+
+	// 3. Query CSAT trend (weekly/daily chart data)
+	cfg := resolveTrendConfig(period)
+	csatTrend, err := queryCSATTrend(ctx, r.collection, branch, cfg, sentiment.AvgRating)
+	if err != nil {
+		return nil, err
+	}
+
 	return &dto.FeedbackStatsResponse{
-		AvgRating:     avgRating,
-		PositiveCount: posCount,
-		NeutralCount:  neuCount,
-		NegativeCount: negCount,
-		WeeklyCSAT:    weeklyCSAT,
+		AvgRating:     sentiment.AvgRating,
+		PositiveCount: sentiment.Positive,
+		NeutralCount:  sentiment.Neutral,
+		NegativeCount: sentiment.Negative,
+		WeeklyCSAT:    csatTrend,
 	}, nil
 }
+

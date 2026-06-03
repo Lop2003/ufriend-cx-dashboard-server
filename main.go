@@ -2,12 +2,17 @@ package main
 
 import (
 	"log"
+	"log/slog"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/joho/godotenv"
 	"ufriend-cx-dashboard-server/internal/auth"
 	"ufriend-cx-dashboard-server/internal/customer"
+	customerInbound "ufriend-cx-dashboard-server/internal/customer/adapter/inbound"
 	"ufriend-cx-dashboard-server/internal/feedback"
 	"ufriend-cx-dashboard-server/internal/follow_up"
 	"ufriend-cx-dashboard-server/pkg/database"
@@ -41,7 +46,19 @@ func main() {
 
 	// Middleware
 	app.Use(middleware.RecoverConfig())
-	app.Use(middleware.CORSConfig(os.Getenv("CORS_ORIGINS")))
+
+	// Request logging — access log สำหรับ debug production
+	app.Use(logger.New(logger.Config{
+		Format:     "${time} | ${status} | ${latency} | ${method} ${path}\n",
+		TimeFormat: "2006-01-02 15:04:05",
+	}))
+
+	// CORS — warn ถ้า production ไม่ได้ตั้ง CORS_ORIGINS
+	corsOrigins := os.Getenv("CORS_ORIGINS")
+	if corsOrigins == "" && os.Getenv("APP_ENV") == "production" {
+		slog.Warn("CORS_ORIGINS not set in production — defaulting to localhost origins. Browser requests from production domain will be blocked!")
+	}
+	app.Use(middleware.CORSConfig(corsOrigins))
 
 	// Health check
 	app.Get("/health", func(c *fiber.Ctx) error {
@@ -71,6 +88,7 @@ func main() {
 			LarkBaseURL:     larkBaseURL,
 			LarkAccountsURL: larkAccountsURL,
 			LarkOAuthScope:  larkOAuthScope,
+			EncryptionKey:   os.Getenv("SESSION_ENCRYPTION_KEY"),
 		})
 		authDomain.RegisterRoutes(app)
 	} else {
@@ -88,10 +106,12 @@ func main() {
 	customerDomain := customer.NewCustomerDomain(db.GetDatabase())
 	customerDomain.RegisterRoutes(protected)
 
-	feedbackDomain := feedback.NewFeedbackDomain(db.GetDatabase())
+	customerAdapter := customerInbound.NewCustomerAdapter(db.GetDatabase())
+
+	feedbackDomain := feedback.NewFeedbackDomain(db.GetDatabase(), customerAdapter)
 	feedbackDomain.RegisterRoutes(protected)
 
-	followUpDomain := follow_up.NewFollowUpDomain(db.GetDatabase())
+	followUpDomain := follow_up.NewFollowUpDomain(db.GetDatabase(), customerAdapter)
 	followUpDomain.RegisterRoutes(protected)
 
 	port := os.Getenv("PORT")
@@ -101,6 +121,24 @@ func main() {
 		port = ":" + port
 	}
 
-	log.Printf("Starting server on %s", port)
-	log.Fatal(app.Listen(port))
+	// Graceful shutdown — รอ in-flight requests จบก่อนปิด server
+	// ป้องกัน request ถูกตัดกลางทางเมื่อ deploy ใหม่
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+
+	go func() {
+		log.Printf("Starting server on %s", port)
+		if err := app.Listen(port); err != nil {
+			log.Fatalf("Server error: %v", err)
+		}
+	}()
+
+	<-quit
+	slog.Info("shutting down server gracefully...")
+
+	if err := app.Shutdown(); err != nil {
+		slog.Error("server shutdown error", "error", err)
+	}
+
+	slog.Info("server stopped")
 }

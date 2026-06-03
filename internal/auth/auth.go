@@ -21,36 +21,43 @@ type AuthDomain struct {
 }
 
 type Config struct {
-	AppID          string
-	AppSecret      string
-	RedirectURI    string
-	ClientURL      string
-	LarkBaseURL    string
+	AppID           string
+	AppSecret       string
+	RedirectURI     string
+	ClientURL       string
+	LarkBaseURL     string
 	LarkAccountsURL string
-	LarkOAuthScope string
+	LarkOAuthScope  string
+	EncryptionKey   string
 }
 
 func NewAuthDomain(db *mongo.Database, cfg Config) *AuthDomain {
-	// สร้าง index สำหรับค้นหา session ด้วย session_id
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
+	// สร้าง index แบบ blocking — ต้องสร้างเสร็จก่อนรับ traffic
+	// ถ้า index มีอยู่แล้ว MongoDB จะ skip ทันที (idempotent, < 1ms)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 
-		col := db.Collection("auth_sessions")
-		_, err := col.Indexes().CreateOne(ctx, mongo.IndexModel{
+	col := db.Collection("auth_sessions")
+	_, err := col.Indexes().CreateMany(ctx, []mongo.IndexModel{
+		{
 			Keys:    bson.D{{Key: "session_id", Value: 1}},
 			Options: options.Index().SetUnique(true),
-		})
-		if err != nil {
-			slog.Error("failed to create auth_sessions index",
-				"collection", "auth_sessions",
-				"error", err,
-			)
-		}
-	}()
+		},
+		{
+			// TTL index: MongoDB จะลบ session ที่ expires_at ผ่านไปแล้วอัตโนมัติ
+			Keys:    bson.D{{Key: "expires_at", Value: 1}},
+			Options: options.Index().SetExpireAfterSeconds(0),
+		},
+	})
+	if err != nil {
+		slog.Error("failed to create auth_sessions indexes",
+			"collection", "auth_sessions",
+			"error", err,
+		)
+	}
 
 	larkClient := lark.NewClient(cfg.AppID, cfg.AppSecret, cfg.LarkBaseURL, cfg.LarkAccountsURL, cfg.LarkOAuthScope)
-	repo := repository.NewAuthRepository(db)
+	repo := repository.NewAuthRepository(db, cfg.EncryptionKey)
 	uc := usecase.NewAuthUsecase(repo, larkClient, cfg.RedirectURI)
 	h := handler.NewAuthHandler(uc, cfg.ClientURL)
 
@@ -60,3 +67,4 @@ func NewAuthDomain(db *mongo.Database, cfg Config) *AuthDomain {
 func (d *AuthDomain) RegisterRoutes(app *fiber.App) {
 	authHTTP.RegisterAuthHTTPRoutes(app, d.handler)
 }
+

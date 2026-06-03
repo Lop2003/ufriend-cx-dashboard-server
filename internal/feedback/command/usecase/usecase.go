@@ -1,8 +1,9 @@
-﻿package usecase
+package usecase
 
 import (
 	"context"
 
+	"ufriend-cx-dashboard-server/internal/feedback/adapter/outbound"
 	"ufriend-cx-dashboard-server/internal/feedback/command/dto"
 	"ufriend-cx-dashboard-server/internal/feedback/command/repository"
 	"ufriend-cx-dashboard-server/internal/feedback/model"
@@ -13,9 +14,10 @@ type FeedbackCommandUsecase interface {
 }
 
 type feedbackCommandUsecase struct {
-	repo repository.FeedbackCommandRepository
+	repo            repository.FeedbackCommandRepository
+	customerAdapter outbound.CustomerAdapter
 }
 
-func NewFeedbackCommandUsecase(repo repository.FeedbackCommandRepository) FeedbackCommandUsecase {
-	return &feedbackCommandUsecase{repo: repo}
+func NewFeedbackCommandUsecase(repo repository.FeedbackCommandRepository, customerAdapter outbound.CustomerAdapter) FeedbackCommandUsecase {
+	return &feedbackCommandUsecase{repo: repo, customerAdapter: customerAdapter}
 }

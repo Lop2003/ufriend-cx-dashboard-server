@@ -44,17 +44,27 @@ func (r *customerQueryRepository) FindByID(ctx context.Context, id string) (*dto
 
 	pipeline := mongo.Pipeline{
 		{{Key: "$match", Value: bson.M{"_id": objId}}},
+		// Pipeline $lookup กับ $sort + $limit เพื่อป้องกัน response ขนาดใหญ่
+		// คืนเฉพาะ 50 รายการล่าสุด (ถ้าต้องการดูทั้งหมดให้ใช้ API ของ feedback/follow_up โดยตรง)
 		{{Key: "$lookup", Value: bson.M{
-			"from":         "feedbacks",
-			"localField":   "_id",
-			"foreignField": "customer_id",
-			"as":           "feedbacks",
+			"from": "feedbacks",
+			"let":  bson.M{"cid": "$_id"},
+			"pipeline": bson.A{
+				bson.M{"$match": bson.M{"$expr": bson.M{"$eq": bson.A{"$customer_id", "$$cid"}}}},
+				bson.M{"$sort": bson.M{"created_at": -1}},
+				bson.M{"$limit": 50},
+			},
+			"as": "feedbacks",
 		}}},
 		{{Key: "$lookup", Value: bson.M{
-			"from":         "follow_ups",
-			"localField":   "_id",
-			"foreignField": "customer_id",
-			"as":           "follow_ups",
+			"from": "follow_ups",
+			"let":  bson.M{"cid": "$_id"},
+			"pipeline": bson.A{
+				bson.M{"$match": bson.M{"$expr": bson.M{"$eq": bson.A{"$customer_id", "$$cid"}}}},
+				bson.M{"$sort": bson.M{"created_at": -1}},
+				bson.M{"$limit": 50},
+			},
+			"as": "follow_ups",
 		}}},
 	}
 

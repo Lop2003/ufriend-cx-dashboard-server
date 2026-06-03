@@ -19,38 +19,10 @@ type CustomerDomain struct {
 }
 
 func NewCustomerDomain(db *mongo.Database) *CustomerDomain {
-	// สร้างดัชนี (Indexes) ทั้งหมดแบบ Background ในรูปแบบ Asynchronous เพื่อเพิ่มสปีดการเสิร์ชระดับ 2 ล้านเรคคอร์ด
-	go func() {
-		start := time.Now()
-		// ให้เวลาเพียงพอสำหรับการสร้าง Index บนข้อมูลขนาดใหญ่ระดับ 10 ล้านเรคคอร์ด
-		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
-		defer cancel()
-
-		customersCol := db.Collection("customers")
-
-		_, err := customersCol.Indexes().CreateMany(ctx, []mongo.IndexModel{
-			{Keys: bson.D{{Key: "branch", Value: 1}}},
-			{Keys: bson.D{{Key: "status", Value: 1}}},
-			{Keys: bson.D{{Key: "created_at", Value: -1}}},
-			{Keys: bson.D{{Key: "name", Value: 1}}},
-			{Keys: bson.D{{Key: "phone", Value: 1}}},
-			{Keys: bson.D{{Key: "product", Value: 1}}},
-		})
-
-		if err != nil {
-			slog.Error("failed to create customer indexes",
-				"collection", "customers",
-				"duration", time.Since(start).String(),
-				"error", err,
-			)
-		} else {
-			slog.Info("customer indexes verified",
-				"collection", "customers",
-				"indexes", []string{"branch", "status", "created_at", "name", "phone", "product"},
-				"duration", time.Since(start).String(),
-			)
-		}
-	}()
+	// สร้าง index แบบ blocking — ต้องสร้างเสร็จก่อนรับ traffic
+	// ถ้า index มีอยู่แล้ว MongoDB จะ skip ทันที (idempotent, < 1ms)
+	// ใช้ timeout 2 นาทีเพื่อรองรับ initial index creation บนข้อมูลขนาดใหญ่
+	createCustomerIndexes(db)
 
 	queryRepo := queryRepository.NewCustomerQueryRepository(db)
 	queryUC := queryUsecase.NewCustomerQueryUsecase(queryRepo)
@@ -59,6 +31,66 @@ func NewCustomerDomain(db *mongo.Database) *CustomerDomain {
 	return &CustomerDomain{
 		queryHandler: queryH,
 	}
+}
+
+// createCustomerIndexes สร้าง index สำหรับ customers collection
+// Blocking call — ถ้า fail จะ log error แต่ไม่ crash server (graceful degradation)
+func createCustomerIndexes(db *mongo.Database) {
+	start := time.Now()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	customersCol := db.Collection("customers")
+
+	_, err := customersCol.Indexes().CreateMany(ctx, []mongo.IndexModel{
+		{Keys: bson.D{{Key: "branch", Value: 1}}},
+		{Keys: bson.D{{Key: "status", Value: 1}}},
+		{Keys: bson.D{{Key: "created_at", Value: -1}}},
+		{Keys: bson.D{{Key: "name", Value: 1}}},
+		{Keys: bson.D{{Key: "phone", Value: 1}}},
+		{Keys: bson.D{{Key: "product", Value: 1}}},
+	})
+
+	if err != nil {
+		slog.Error("failed to create customer indexes",
+			"collection", "customers",
+			"duration", time.Since(start).String(),
+			"error", err,
+		)
+	} else {
+		slog.Info("customer indexes verified",
+			"collection", "customers",
+			"indexes", []string{"branch", "status", "created_at", "name", "phone", "product"},
+			"duration", time.Since(start).String(),
+		)
+	}
+
+	// Index สำหรับ $lookup join — ไม่มีจะ scan ทั้ง collection
+	createRelatedIndexes(db)
+}
+
+// createRelatedIndexes สร้าง index บน feedbacks/follow_ups สำหรับ $lookup
+func createRelatedIndexes(db *mongo.Database) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	// feedbacks.customer_id — ใช้ใน $lookup จาก customer detail
+	if _, err := db.Collection("feedbacks").Indexes().CreateOne(ctx, mongo.IndexModel{
+		Keys: bson.D{{Key: "customer_id", Value: 1}},
+	}); err != nil {
+		slog.Error("failed to create feedbacks.customer_id index", "error", err)
+	}
+
+	// follow_ups.customer_id — ใช้ใน $lookup จาก customer detail
+	if _, err := db.Collection("follow_ups").Indexes().CreateOne(ctx, mongo.IndexModel{
+		Keys: bson.D{{Key: "customer_id", Value: 1}},
+	}); err != nil {
+		slog.Error("failed to create follow_ups.customer_id index", "error", err)
+	}
+
+	slog.Info("related indexes verified",
+		"indexes", []string{"feedbacks.customer_id", "follow_ups.customer_id"},
+	)
 }
 
 func (d *CustomerDomain) RegisterRoutes(router fiber.Router) {

@@ -76,3 +76,9 @@ type BranchStat struct {
 	AvgRating     float64 `json:"avg_rating" bson:"avg_rating"`
 	OverdueCount  int     `json:"overdue_count" bson:"overdue_count"`
 }
+
+// DailyStatEntry — flat map format สำหรับ daily stats chart
+// Frontend คาดหวัง format: { "date": "2026-01-01", "สยาม": 5, "ลาดพร้าว": 3 }
+// ใช้ map[string]interface{} แทน bson.M เพื่อไม่ผูกกับ MongoDB type
+type DailyStatEntry = map[string]interface{}
+

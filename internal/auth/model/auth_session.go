@@ -8,6 +8,7 @@ type AuthSession struct {
 	UserID       string    `bson:"user_id"`
 	AccessToken  string    `bson:"access_token"`
 	RefreshToken string    `bson:"refresh_token"`
+	TokenVersion int       `bson:"token_version"`
 	ExpiresAt    time.Time `bson:"expires_at"`
 	CreatedAt    time.Time `bson:"created_at"`
 }

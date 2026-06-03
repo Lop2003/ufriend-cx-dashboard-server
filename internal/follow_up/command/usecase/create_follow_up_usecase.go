@@ -1,7 +1,8 @@
-﻿package usecase
+package usecase
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -17,6 +18,15 @@ func (u *followUpCommandUsecase) CreateFollowUp(ctx context.Context, req *dto.Cr
 	customerId, err := primitive.ObjectIDFromHex(req.CustomerId)
 	if err != nil {
 		return nil, fmt.Errorf("invalid customer_id: %w", err)
+	}
+
+	// ตรวจ customer มีอยู่จริงผ่าน outbound adapter (ไม่เรียก customers collection ตรง)
+	exists, err := u.customerAdapter.CustomerExists(ctx, customerId)
+	if err != nil {
+		return nil, fmt.Errorf("check customer existence: %w", err)
+	}
+	if !exists {
+		return nil, errors.New("customer not found")
 	}
 
 	followUp := &model.FollowUp{

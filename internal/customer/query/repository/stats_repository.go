@@ -4,31 +4,16 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"ufriend-cx-dashboard-server/internal/customer/query/dto"
+	"ufriend-cx-dashboard-server/pkg/period"
 )
 
-// parsePeriodFilter converts a period string ("7d", "1m") into a bson.M filter on created_at.
-// Returns empty bson.M{} when period is empty or unrecognized → zero regression.
-func parsePeriodFilter(period string) bson.M {
-	var since time.Time
-	now := time.Now()
-
-	switch period {
-	case "7d":
-		since = now.AddDate(0, 0, -7)
-	case "1m":
-		since = now.AddDate(0, -1, 0)
-	case "3m":
-		since = now.AddDate(0, -3, 0)
-	default:
-		return bson.M{}
-	}
-
-	return bson.M{"created_at": bson.M{"$gte": since}}
+// parsePeriodFilter delegates to shared period.ParseFilter
+func parsePeriodFilter(p string) bson.M {
+	return period.ParseFilter(p)
 }
 
 func (r *customerQueryRepository) GetSummary(ctx context.Context, period string) (*dto.SummaryResponse, error) {
@@ -108,13 +93,22 @@ func (r *customerQueryRepository) GetSummary(ctx context.Context, period string)
 	}, nil
 }
 
-func (r *customerQueryRepository) GetByBranch(ctx context.Context, period string) ([]*dto.BranchStat, error) {
+func (r *customerQueryRepository) GetByBranch(ctx context.Context, period string, branch string) ([]*dto.BranchStat, error) {
 	periodMatch := parsePeriodFilter(period)
 
-	// Step 1: Aggregate customers by branch (with optional period filter)
+	// สร้าง match filter รวม period + branch (ถ้ามี)
+	matchFilter := bson.M{}
+	for k, v := range periodMatch {
+		matchFilter[k] = v
+	}
+	if branch != "" {
+		matchFilter["branch"] = branch
+	}
+
+	// Step 1: Aggregate customers by branch
 	pipelineCustomers := mongo.Pipeline{}
-	if len(periodMatch) > 0 {
-		pipelineCustomers = append(pipelineCustomers, bson.D{{Key: "$match", Value: periodMatch}})
+	if len(matchFilter) > 0 {
+		pipelineCustomers = append(pipelineCustomers, bson.D{{Key: "$match", Value: matchFilter}})
 	}
 	pipelineCustomers = append(pipelineCustomers,
 		bson.D{{Key: "$group", Value: bson.M{
@@ -140,10 +134,10 @@ func (r *customerQueryRepository) GetByBranch(ctx context.Context, period string
 		return nil, fmt.Errorf("decode customer branch stats: %w", err)
 	}
 
-	// Step 2: Aggregate average feedback ratings by branch (with same period filter)
+	// Step 2: Aggregate average feedback ratings by branch (with same combined filter)
 	pipelineFeedbacks := mongo.Pipeline{}
-	if len(periodMatch) > 0 {
-		pipelineFeedbacks = append(pipelineFeedbacks, bson.D{{Key: "$match", Value: periodMatch}})
+	if len(matchFilter) > 0 {
+		pipelineFeedbacks = append(pipelineFeedbacks, bson.D{{Key: "$match", Value: matchFilter}})
 	}
 	pipelineFeedbacks = append(pipelineFeedbacks, bson.D{{Key: "$group", Value: bson.M{
 		"_id":        "$branch",
@@ -184,7 +178,7 @@ func (r *customerQueryRepository) GetByBranch(ctx context.Context, period string
 	return stats, nil
 }
 
-func (r *customerQueryRepository) GetDailyStats(ctx context.Context, period string) ([]bson.M, error) {
+func (r *customerQueryRepository) GetDailyStats(ctx context.Context, period string) ([]dto.DailyStatEntry, error) {
 	periodMatch := parsePeriodFilter(period)
 
 	pipeline := mongo.Pipeline{}
@@ -231,37 +225,32 @@ func (r *customerQueryRepository) GetDailyStats(ctx context.Context, period stri
 		return nil, fmt.Errorf("decode daily stats: %w", err)
 	}
 
-	var formatted []bson.M
-	rowMap := make(map[string]bson.M)
+	// แปลงผลลัพธ์เป็น flat map format ที่ frontend คาดหวัง
+	// format: { "date": "2026-01-01", "สยาม": 5, "ลาดพร้าว": 3 }
+	rowMap := make(map[string]dto.DailyStatEntry)
 	var dateKeys []string
 
 	for _, res := range dbResults {
 		date := res.Id.Date
-		branch := res.Id.Branch
-		count := res.Count
-
 		if date == "" {
 			continue
 		}
 
-		row, exists := rowMap[date]
+		entry, exists := rowMap[date]
 		if !exists {
-			row = bson.M{"date": date}
-			rowMap[date] = row
+			entry = dto.DailyStatEntry{"date": date}
+			rowMap[date] = entry
 			dateKeys = append(dateKeys, date)
 		}
 
-		safeKey := strings.ReplaceAll(branch, " ", "_")
-		row[safeKey] = count
+		safeKey := strings.ReplaceAll(res.Id.Branch, " ", "_")
+		entry[safeKey] = res.Count
 	}
 
+	result := make([]dto.DailyStatEntry, 0, len(dateKeys))
 	for _, dateKey := range dateKeys {
-		formatted = append(formatted, rowMap[dateKey])
+		result = append(result, rowMap[dateKey])
 	}
 
-	if formatted == nil {
-		formatted = []bson.M{}
-	}
-
-	return formatted, nil
+	return result, nil
 }

@@ -2,7 +2,8 @@ package feedback
 
 import (
 	"github.com/gofiber/fiber/v2"
-	"go.mongodb.org/mongo-driver/mongo"
+	customerInbound "ufriend-cx-dashboard-server/internal/customer/adapter/inbound"
+	"ufriend-cx-dashboard-server/internal/feedback/adapter/outbound"
 	commandHandler "ufriend-cx-dashboard-server/internal/feedback/command/handler"
 	commandRepository "ufriend-cx-dashboard-server/internal/feedback/command/repository"
 	commandUsecase "ufriend-cx-dashboard-server/internal/feedback/command/usecase"
@@ -10,6 +11,7 @@ import (
 	queryRepository "ufriend-cx-dashboard-server/internal/feedback/query/repository"
 	queryUsecase "ufriend-cx-dashboard-server/internal/feedback/query/usecase"
 	"ufriend-cx-dashboard-server/internal/feedback/router/http"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 type FeedbackDomain struct {
@@ -17,13 +19,18 @@ type FeedbackDomain struct {
 	commandHandler *commandHandler.FeedbackCommandHandler
 }
 
-func NewFeedbackDomain(db *mongo.Database) *FeedbackDomain {
+func NewFeedbackDomain(db *mongo.Database, customerAdapter customerInbound.CustomerAdapter) *FeedbackDomain {
+	// 1. Query side (bottom-up)
 	queryRepo := queryRepository.NewFeedbackQueryRepository(db)
 	queryUC := queryUsecase.NewFeedbackQueryUsecase(queryRepo)
 	queryH := queryHandler.NewFeedbackQueryHandler(queryUC)
 
+	// 2. Outbound adapters
+	custAdapter := outbound.NewCustomerAdapter(customerAdapter)
+
+	// 3. Command side (bottom-up)
 	commandRepo := commandRepository.NewFeedbackCommandRepository(db)
-	commandUC := commandUsecase.NewFeedbackCommandUsecase(commandRepo)
+	commandUC := commandUsecase.NewFeedbackCommandUsecase(commandRepo, custAdapter)
 	commandH := commandHandler.NewFeedbackCommandHandler(commandUC)
 
 	return &FeedbackDomain{
