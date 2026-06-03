@@ -7,9 +7,6 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/fiber/v2/middleware/logger"
-	"github.com/joho/godotenv"
 	"ufriend-cx-dashboard-server/internal/auth"
 	"ufriend-cx-dashboard-server/internal/customer"
 	customerInbound "ufriend-cx-dashboard-server/internal/customer/adapter/inbound"
@@ -17,6 +14,10 @@ import (
 	"ufriend-cx-dashboard-server/internal/follow_up"
 	"ufriend-cx-dashboard-server/pkg/database"
 	"ufriend-cx-dashboard-server/pkg/middleware"
+
+	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/logger"
+	"github.com/joho/godotenv"
 )
 
 func main() {
@@ -116,10 +117,9 @@ func main() {
 
 	port := os.Getenv("PORT")
 	if port == "" {
-		port = ":3000"
-	} else {
-		port = ":" + port
+		log.Fatal("PORT environment variable is required")
 	}
+	port = ":" + port
 
 	// Graceful shutdown — รอ in-flight requests จบก่อนปิด server
 	// ป้องกัน request ถูกตัดกลางทางเมื่อ deploy ใหม่

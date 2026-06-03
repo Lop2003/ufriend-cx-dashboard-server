@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"regexp"
+	"strings"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -23,10 +24,33 @@ func (r *customerQueryRepository) FindAll(ctx context.Context, filter *dto.Custo
 	}
 	if filter.Search != "" {
 		escapedSearch := regexp.QuoteMeta(filter.Search)
+
+		// Create a flexible phone search regex by extracting digits
+		var phoneDigits strings.Builder
+		for _, ch := range filter.Search {
+			if ch >= '0' && ch <= '9' {
+				phoneDigits.WriteRune(ch)
+			}
+		}
+
+		var phoneRegex string
+		if phoneDigits.Len() > 0 {
+			var sb strings.Builder
+			for i, r := range phoneDigits.String() {
+				if i > 0 {
+					sb.WriteString(`[^\d]*`)
+				}
+				sb.WriteRune(r)
+			}
+			phoneRegex = sb.String()
+		} else {
+			phoneRegex = escapedSearch
+		}
+
 		bsonFilter["$or"] = []bson.M{
-			{"name": bson.M{"$regex": "^" + escapedSearch}},
-			{"phone": bson.M{"$regex": "^" + escapedSearch}},
-			{"product": bson.M{"$regex": "^" + escapedSearch}},
+			{"name": bson.M{"$regex": escapedSearch, "$options": "i"}},
+			{"phone": bson.M{"$regex": phoneRegex, "$options": "i"}},
+			{"product": bson.M{"$regex": escapedSearch, "$options": "i"}},
 		}
 	}
 
