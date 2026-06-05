@@ -49,6 +49,8 @@ func createCustomerIndexes(db *mongo.Database) {
 		{Keys: bson.D{{Key: "name", Value: 1}}},
 		{Keys: bson.D{{Key: "phone", Value: 1}}},
 		{Keys: bson.D{{Key: "product", Value: 1}}},
+		// Text index on name for $text word-based search (supports last-name matching on 10M+ records)
+		{Keys: bson.D{{Key: "name", Value: "text"}}},
 	})
 
 	if err != nil {

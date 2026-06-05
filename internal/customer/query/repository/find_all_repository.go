@@ -23,34 +23,37 @@ func (r *customerQueryRepository) FindAll(ctx context.Context, filter *dto.Custo
 		bsonFilter["status"] = filter.Status
 	}
 	if filter.Search != "" {
-		escapedSearch := regexp.QuoteMeta(filter.Search)
+		// CRITICAL: On 10M+ records, $or across multiple fields causes full index scans → timeout.
+		// Solution: detect input type and route to a SINGLE indexed field per query.
+		search := filter.Search
 
-		// Create a flexible phone search regex by extracting digits
-		var phoneDigits strings.Builder
-		for _, ch := range filter.Search {
-			if ch >= '0' && ch <= '9' {
-				phoneDigits.WriteRune(ch)
-			}
-		}
-
-		var phoneRegex string
-		if phoneDigits.Len() > 0 {
-			var sb strings.Builder
-			for i, r := range phoneDigits.String() {
-				if i > 0 {
-					sb.WriteString(`[^\d]*`)
+		if containsThai(search) {
+			// Thai text → name search using TEXT INDEX ($text)
+			// Word-based matching: "ใจดี" matches "สมชาย ใจดี" (finds last names)
+			bsonFilter["$text"] = bson.M{"$search": search}
+		} else if search[0] >= '0' && search[0] <= '9' {
+			// Starts with digit → phone search with formatted ^prefix
+			var digits strings.Builder
+			for _, ch := range search {
+				if ch >= '0' && ch <= '9' {
+					digits.WriteRune(ch)
 				}
-				sb.WriteRune(r)
 			}
-			phoneRegex = sb.String()
+			d := digits.String()
+			var formatted string
+			switch {
+			case len(d) <= 3:
+				formatted = d
+			case len(d) <= 6:
+				formatted = d[:3] + "-" + d[3:]
+			default:
+				formatted = d[:3] + "-" + d[3:6] + "-" + d[6:]
+			}
+			bsonFilter["phone"] = bson.M{"$regex": "^" + regexp.QuoteMeta(formatted)}
 		} else {
-			phoneRegex = escapedSearch
-		}
-
-		bsonFilter["$or"] = []bson.M{
-			{"name": bson.M{"$regex": escapedSearch, "$options": "i"}},
-			{"phone": bson.M{"$regex": phoneRegex, "$options": "i"}},
-			{"product": bson.M{"$regex": escapedSearch, "$options": "i"}},
+			// English/Latin → product ^prefix search, case-insensitive
+			escapedSearch := regexp.QuoteMeta(search)
+			bsonFilter["product"] = bson.M{"$regex": "^" + escapedSearch, "$options": "i"}
 		}
 	}
 
@@ -155,4 +158,15 @@ func (r *customerQueryRepository) FindAll(ctx context.Context, filter *dto.Custo
 	}
 
 	return customers, total, nil
+}
+
+// containsThai checks if a string contains any Thai character (Unicode range U+0E00–U+0E7F).
+// Used to detect input type for optimal search index routing.
+func containsThai(s string) bool {
+	for _, r := range s {
+		if r >= 0x0E00 && r <= 0x0E7F {
+			return true
+		}
+	}
+	return false
 }

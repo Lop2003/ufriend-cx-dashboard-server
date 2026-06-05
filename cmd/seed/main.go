@@ -7,6 +7,7 @@ import (
 	"math"
 	"math/rand"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -69,28 +70,26 @@ type weightedItem struct {
 	weight float64
 }
 
-var weightedBranches = []weightedItem{
-	{"สยาม", 0.25},
-	{"ลาดพร้าว", 0.18},
-	{"เมกาบางนา", 0.15},
-	{"ฟิวเจอร์พาร์ค", 0.12},
-	{"รังสิต", 0.10},
-	{"บางนา", 0.08},
-	{"ปิ่นเกล้า", 0.05},
-	{"พระราม 9", 0.04},
-	{"วงเวียนใหญ่", 0.03},
-}
-
-func selectWeightedBranch() string {
+func selectBaseBranch() string {
 	r := rand.Float64()
-	var cumulative float64
-	for _, item := range weightedBranches {
-		cumulative += item.weight
-		if r <= cumulative {
-			return item.name
-		}
+	if r < 0.25 {
+		return "สยาม"
+	} else if r < 0.43 { // +0.18
+		return "ลาดพร้าว"
+	} else if r < 0.58 { // +0.15
+		return "เมกาบางนา"
+	} else if r < 0.70 { // +0.12
+		return "ฟิวเจอร์พาร์ค"
+	} else if r < 0.80 { // +0.10
+		return "รังสิต"
+	} else if r < 0.88 { // +0.08
+		return "บางนา"
+	} else if r < 0.93 { // +0.05
+		return "ปิ่นเกล้า"
+	} else if r < 0.97 { // +0.04
+		return "พระราม 9"
 	}
-	return "สยาม" // fallback
+	return "วงเวียนใหญ่" // 0.03
 }
 
 var weightedProducts = []weightedItem{
@@ -147,7 +146,6 @@ func selectWeightedPlan() int {
 	return 12 // fallback
 }
 
-
 var positiveComments = []string{
 	"บริการดีเยี่ยมมากครับ", "พนักงานพูดจาดี น่ารักมาก", "อนุมัติไวมาก แนะนำเลยครับ",
 	"สินค้าคุณภาพดีมาก ไม่มีปัญหาเลย", "สาขาบริการรวดเร็วทันใจ ประทับใจมาก",
@@ -167,6 +165,76 @@ var negativeComments = []string{
 }
 
 var categories = []string{"service", "payment", "product", "branch"}
+
+func generateRating(branch string, status string, t float64, candidateDate time.Time) int {
+	var S float64
+	if status == "completed" {
+		S = 4.4 + rand.Float64()*0.6 // 4.4 to 5.0
+	} else if status == "overdue" {
+		S = 1.5 + rand.Float64()*1.0 // 1.5 to 2.5
+	} else {
+		// Active customer: branch specific trend over time
+		switch branch {
+		case "สยาม":
+			S = 4.3
+			// Siam dip around 3 months ago (t between 0.70 and 0.80) due to central system lag / queuing issue
+			if t >= 0.70 && t <= 0.80 {
+				distFromCenter := math.Abs(t - 0.75)
+				S -= (1.0 * (1.0 - distFromCenter/0.05))
+			}
+		case "ลาดพร้าว":
+			// Climbing satisfaction over the year from 2.6 to 4.3 as renovations and training took effect
+			S = 2.6 + 1.7*t
+		case "เมกาบางนา":
+			S = 4.1
+			// Weekend drop due to heavy shopping mall crowd queues
+			wd := candidateDate.Weekday()
+			if wd == time.Saturday || wd == time.Sunday {
+				S -= 0.6
+			}
+			// Holiday rush dip (Nov/Dec)
+			if candidateDate.Month() == time.November || candidateDate.Month() == time.December {
+				S -= 0.4
+			}
+		case "ฟิวเจอร์พาร์ค":
+			S = 3.9
+			// Weekend drop due to crowd queues
+			wd := candidateDate.Weekday()
+			if wd == time.Saturday || wd == time.Sunday {
+				S -= 0.7
+			}
+		case "บางนา":
+			// Struggling branch, stays low and fluctuates slightly
+			S = 2.7 + 0.3*math.Sin(t*10.0)
+		case "รังสิต":
+			S = 3.8
+			// Semester start rush dips slightly
+			m := candidateDate.Month()
+			if m == time.June || m == time.November {
+				S -= 0.5
+			}
+		case "ปิ่นเกล้า":
+			S = 3.7 + 0.3*math.Cos(t*5.0)
+		case "พระราม 9":
+			S = 4.0
+		case "วงเวียนใหญ่":
+			S = 3.2 + 0.5*math.Sin(t*8.0)
+		default:
+			S = 3.8
+		}
+	}
+
+	// Dynamic triangular noise centering around S
+	val := S + (rand.Float64()+rand.Float64()-1.0)*1.2
+	rating := int(math.Round(val))
+	if rating < 1 {
+		rating = 1
+	}
+	if rating > 5 {
+		rating = 5
+	}
+	return rating
+}
 
 func sentimentFromRating(rating int) string {
 	switch {
@@ -239,8 +307,16 @@ func main() {
 	db.Collection("feedbacks").Drop(ctx)
 	db.Collection("follow_ups").Drop(ctx)
 
-	totalCustomers := 2000000
+	totalCustomers := 10000000
+	if val := os.Getenv("SEED_COUNT"); val != "" {
+		if count, err := strconv.Atoi(val); err == nil {
+			totalCustomers = count
+		}
+	}
 	batchSize := 10000
+	if totalCustomers < batchSize {
+		batchSize = totalCustomers
+	}
 
 	customersCol := db.Collection("customers")
 	feedbacksCol := db.Collection("feedbacks")
@@ -266,8 +342,96 @@ func main() {
 		name := firstNames[rand.Intn(len(firstNames))] + " " + lastNames[rand.Intn(len(lastNames))]
 		phone := randomPhone()
 		product := selectWeightedProduct()
-		branch := selectWeightedBranch()
 		plan := selectWeightedPlan()
+		branch := selectBaseBranch()
+
+		// 1. Base distribution
+		rDays := rand.Float64()
+		u := math.Pow(rDays, 1.3)
+
+		// 2. Branch-specific registration volume fluctuations (Time-Warping with gentler waves)
+		var fluctuation float64
+		switch branch {
+		case "สยาม":
+			// Siam: peaks in summer (t ~ 0.8) and winter (t ~ 0.5), dip in autumn
+			fluctuation = 0.04*math.Sin(u*2*math.Pi*2) + 0.01*math.Sin(u*2*math.Pi*6)
+		case "ลาดพร้าว":
+			// Ladprao: shifted peaks, different cycle
+			fluctuation = 0.03*math.Cos(u*2*math.Pi*3) + 0.01*math.Sin(u*2*math.Pi*10)
+		case "เมกาบางนา":
+			// Mega Bangna: highly active during school/summer holidays
+			fluctuation = 0.05*math.Sin(u*2*math.Pi*1.5) + 0.02*math.Cos(u*2*math.Pi*8)
+		case "ฟิวเจอร์พาร์ค":
+			// Future Park: monthly payday cycle spikes (12 waves/year)
+			fluctuation = 0.03*math.Sin(u*2*math.Pi*12) + 0.01*math.Sin(u*2*math.Pi*4)
+		case "รังสิต":
+			// Rangsit: dips during student break (March-May), spikes during semesters
+			fluctuation = 0.04 * math.Sin(u*2*math.Pi*2.2)
+		case "บางนา":
+			// Bangna: wavy decline
+			fluctuation = 0.03 * math.Cos(u*2*math.Pi*4)
+		case "ปิ่นเกล้า":
+			fluctuation = 0.03 * math.Sin(u*2*math.Pi*5)
+		case "พระราม 9":
+			fluctuation = 0.02 * math.Cos(u*2*math.Pi*9)
+		case "วงเวียนใหญ่":
+			fluctuation = 0.04 * math.Sin(u*2*math.Pi*7)
+		}
+
+		// Add daily noise
+		noise := (rand.Float64() - 0.5) * 0.01
+
+		uWarped := u + fluctuation + noise
+		// Reflect out-of-bounds values to prevent clumping boundary spikes
+		if uWarped < 0.0 {
+			uWarped = -uWarped
+		}
+		if uWarped > 1.0 {
+			uWarped = 2.0 - uWarped
+		}
+		// Safe fallback clamp
+		if uWarped < 0.0 {
+			uWarped = 0.0
+		}
+		if uWarped > 1.0 {
+			uWarped = 1.0
+		}
+
+		daysAgo := int(365.0 * uWarped)
+
+		// 3. Branch-Specific Event Spikes (Slightly smoother & significantly smaller spikes so y-axis scale remains readable)
+		if branch == "สยาม" && rand.Float64() < 0.02 {
+			daysAgo = 175 + rand.Intn(10) // Siam launch spike (day 175-185, 10 days)
+		} else if branch == "ลาดพร้าว" && rand.Float64() < 0.025 {
+			daysAgo = 235 + rand.Intn(10) // Ladprao reopening spike (day 235-245, 10 days)
+		} else if branch == "เมกาบางนา" && rand.Float64() < 0.02 {
+			daysAgo = 85 + rand.Intn(10) // Mega Bangna promo spike (day 85-95, 10 days)
+		} else if branch == "ฟิวเจอร์พาร์ค" && rand.Float64() < 0.018 {
+			daysAgo = 5 + rand.Intn(10) // Future Park holiday sale spike (day 5-15, 10 days)
+		}
+
+		candidateDate := time.Now().AddDate(0, 0, -daysAgo)
+
+		// 4. Weekly seasonality: Concentrate registrations on weekends (Fri, Sat, Sun)
+		wd := candidateDate.Weekday()
+		if wd >= time.Monday && wd <= time.Thursday && rand.Float64() < 0.35 {
+			daysToSubtract := int(wd) + rand.Intn(3) // Monday (1) -> Sun, Sat, Fri
+			candidateDate = candidateDate.AddDate(0, 0, -daysToSubtract)
+		}
+
+		// Ensure no future dates
+		if candidateDate.After(time.Now()) {
+			candidateDate = time.Now()
+		}
+		createdAt := candidateDate
+
+		t := 1.0 - (float64(daysAgo) / 365.0)
+		if t < 0.0 {
+			t = 0.0
+		}
+		if t > 1.0 {
+			t = 1.0
+		}
 
 		// Distribute status based on branch weights for highly varied performance indicators
 		statusRand := rand.Float64()
@@ -303,26 +467,6 @@ func main() {
 			}
 		}
 
-		// 1. Growth trend over the last 365 days (smooth growing trend using exponent 1.3 to avoid extreme spikes)
-		rDays := rand.Float64()
-		daysAgo := int(365.0 * math.Pow(rDays, 1.3))
-
-		candidateDate := time.Now().AddDate(0, 0, -daysAgo)
-
-		// 2. Weekly seasonality: Concentrate registrations on weekends (Fri, Sat, Sun)
-		// Shift backward to Sunday, Saturday, or Friday to prevent future dates that clump on Today
-		wd := candidateDate.Weekday()
-		if wd >= time.Monday && wd <= time.Thursday && rand.Float64() < 0.35 {
-			daysToSubtract := int(wd) + rand.Intn(3) // Monday (1) -> subtracts 1, 2, or 3 days -> Sun, Sat, Fri
-			candidateDate = candidateDate.AddDate(0, 0, -daysToSubtract)
-		}
-
-		// Ensure no future dates (safeguard)
-		if candidateDate.After(time.Now()) {
-			candidateDate = time.Now()
-		}
-		createdAt := candidateDate
-
 		customer := Customer{
 			Id:         cID,
 			Name:       name,
@@ -341,59 +485,7 @@ func main() {
 		var feedbackDate time.Time
 
 		if hasFeedback {
-			// Rating bias: completed is positive, overdue is negative, active is random
-			var rating int
-			if status == "completed" {
-				// Bias 4-5 stars
-				rating = 4 + rand.Intn(2)
-			} else if status == "overdue" {
-				// Bias 1-3 stars
-				rating = 1 + rand.Intn(3)
-			} else {
-				// Branch-specific bias
-				r := rand.Float64()
-				switch branch {
-				case "สยาม", "เมกาบางนา":
-					// High satisfaction bias (mostly 4-5 stars)
-					if r < 0.05 {
-						rating = 1
-					} else if r < 0.10 {
-						rating = 2
-					} else if r < 0.20 {
-						rating = 3
-					} else if r < 0.55 {
-						rating = 4
-					} else {
-						rating = 5
-					}
-				case "ลาดพร้าว", "บางนา":
-					// Low satisfaction bias (mostly 1-3 stars)
-					if r < 0.35 {
-						rating = 1
-					} else if r < 0.60 {
-						rating = 2
-					} else if r < 0.80 {
-						rating = 3
-					} else if r < 0.95 {
-						rating = 4
-					} else {
-						rating = 5
-					}
-				default:
-					// Average bias
-					if r < 0.10 {
-						rating = 1
-					} else if r < 0.20 {
-						rating = 2
-					} else if r < 0.35 {
-						rating = 3
-					} else if r < 0.65 {
-						rating = 4
-					} else {
-						rating = 5
-					}
-				}
-			}
+			rating := generateRating(branch, status, t, createdAt)
 			feedbackRating = rating
 
 			var comment string
